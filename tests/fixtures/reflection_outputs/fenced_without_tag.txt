@@ -1,0 +1,15 @@
+Based on my analysis, here is the evaluation:
+
+```
+{
+  "overall_coverage_score": 0.5,
+  "is_mission_complete": false,
+  "confidence_score": 0.0,
+  "aggregate_rationale": "Partial coverage needs more depth",
+  "per_objective_scores": [
+    {"objective_id": "OBJ01", "score": 0.5, "reasoning": "Basic coverage only"}
+  ]
+}
+```
+
+Let me know if you need more details.

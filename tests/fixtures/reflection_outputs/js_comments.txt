@@ -1,0 +1,9 @@
+{
+  "overall_coverage_score": 0.8, // High score
+  "is_mission_complete": false, // Not yet complete
+  "confidence_score": 0.0,
+  "aggregate_rationale": "Good progress", // Brief summary
+  "per_objective_scores": [
+    {"objective_id": "OBJ01", "score": 0.8, "reasoning": "Well covered"} // First objective
+  ]
+}

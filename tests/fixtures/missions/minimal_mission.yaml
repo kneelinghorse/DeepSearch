@@ -1,0 +1,5 @@
+missionId: "MIN.1"
+title: "Minimal Mission"
+objective: "Ensure defaults work"
+successCriteria:
+  - "Return baseline agent state"

@@ -1,0 +1,61 @@
+{
+  "compilerMode": "no_enrichment",
+  "missionId": "S91-GOLDEN-01",
+  "title": "S91-GOLDEN-01: Cross-service compiler parity",
+  "objective": "Compare DeepSeek, OpenAI, and Gemini contract compilation.",
+  "successCriteria": [
+    "Compare DeepSeek and OpenAI compiler behavior",
+    "Include a comparison matrix",
+    "Do not include unsupported provider claims"
+  ],
+  "deliverables": [
+    "Annotated bibliography with at least 3 entries"
+  ],
+  "background": "TraceLab and DeepSearch must compile the same authored mission.",
+  "focus": "Prove deterministic cross-service parity before provider migration.",
+  "constraints": [
+    "Use primary provider documentation"
+  ],
+  "requiredEntities": [
+    "DeepSeek",
+    "OpenAI",
+    "Gemini"
+  ],
+  "excludedEntities": [
+    "Gemini"
+  ],
+  "excluded_domains": [
+    "https://example.com/path"
+  ],
+  "references": [
+    {
+      "title": "OpenAI API documentation",
+      "url": "https://platform.openai.com/docs"
+    },
+    {
+      "title": "DeepSeek API documentation",
+      "url": "https://api-docs.deepseek.com/"
+    }
+  ],
+  "expectedOutputSchema": {
+    "kind": "comparison_table",
+    "title": "Provider comparison",
+    "format": "table",
+    "columns": [
+      "Provider",
+      "Compiler behavior",
+      "Evidence"
+    ],
+    "required_sections": [
+      "Evidence gaps"
+    ],
+    "minimum_citation_count": 3
+  },
+  "coverageThresholds": {
+    "entity": 0.75,
+    "objective": 0.7
+  },
+  "validationThresholds": {
+    "slot": 0.5
+  }
+}

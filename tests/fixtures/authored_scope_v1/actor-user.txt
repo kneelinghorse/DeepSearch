@@ -1,0 +1,3 @@
+Build the S61-LOG2-ACCEPT-01 report described in the system instructions.
+
+Retrieve sources live via `web_search` and `source_fetch` — there is no pre-loaded source pool. Track per-entity notes and cited URLs in the scratchpad as you go. When the report is complete, emit it as a single Markdown string via `final_answer(...)`.

@@ -1,0 +1,6 @@
+missionId: "DEPTH.3"
+title: "Invalid Depth Mission"
+objective: "Test unknown depth falls back to baseline"
+successCriteria:
+  - "Verify unknown depth defaults to baseline"
+researchDepth: "ultra"

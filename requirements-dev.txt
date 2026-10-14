@@ -1,0 +1,10 @@
+pytest==8.3.4
+pytest-asyncio==0.24.0
+ruff==0.8.2
+black==24.10.0
+mypy==1.13.0
+ipython==8.30.0
+types-PyYAML==6.0.12.20240917
+
+# Isolated S93 local tool-contract validation (no production dependency).
+jsonschema==4.26.0

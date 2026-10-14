@@ -1,0 +1,26 @@
+# DEEP Tier Smoke Test - Sprint 11 Validation
+# Tests: Higher finding targets, table requirements, comprehensive synthesis
+mission_id: SMOKE-DEEP-001
+title: Test DEEP tier report quality
+objective: Verify DEEP tier produces comprehensive findings with tables
+research_depth: deep
+success_criteria:
+  - Generates minimum 12 findings (DEEP tier min_total_findings)
+  - Report includes comparison tables
+  - Report includes synthesized recommendations
+  - Sources from at least 3 unique domains
+deliverables:
+  - Synthesized markdown report with tables in cmos/research/
+research_phases:
+  - phase: Comprehensive Analysis
+    focus: Deep dive into topic areas
+    questions:
+      - What are the technical details?
+      - How do different approaches compare?
+      - What are best practices?
+context: |
+  This is a DEEP tier smoke test for Sprint 11 validation:
+  - B11.1: LLM synthesis produces structured report
+  - B11.2: Depth-aware targets (deep: 5/loop, require_tables)
+  - B11.3: Quality gates (12 findings, 6 sources, 3 domains)
+  - B11.4: Gemini synthesis with fallback

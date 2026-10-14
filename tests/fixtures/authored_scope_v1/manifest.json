@@ -1,0 +1,193 @@
+{
+  "fixture_version": "authored-scope-parity-v1",
+  "schema": "1.2",
+  "compiler_revision": 3,
+  "counter_version": "unicode-whitespace-v1",
+  "historical_executed_contract_id": "bae1333274533285",
+  "historical_preview_contract_id": "106cb8668a3efdb8",
+  "fixture_contract_id": "8ca1ebfaa604dc7e",
+  "actions": [
+    {
+      "name": "first requested fetch",
+      "tool": "source_fetch",
+      "input": "https://www.postgresql.org/docs/current/functions-datetime.html",
+      "already_consulted": [],
+      "refusal": null
+    },
+    {
+      "name": "second requested fetch",
+      "tool": "source_fetch",
+      "input": "https://www.postgresql.org/docs/current/explicit-locking.html",
+      "already_consulted": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html"
+      ],
+      "refusal": null
+    },
+    {
+      "name": "stored reread at cap",
+      "tool": "source_fetch",
+      "input": "https://www.postgresql.org/docs/current/functions-datetime.html",
+      "already_consulted": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html",
+        "https://www.postgresql.org/docs/current/explicit-locking.html"
+      ],
+      "refusal": null
+    },
+    {
+      "name": "versioned replacement",
+      "tool": "source_fetch",
+      "input": "https://www.postgresql.org/docs/18/functions-datetime.html",
+      "already_consulted": [],
+      "refusal": "scope_source_not_allowed"
+    },
+    {
+      "name": "apex replacement",
+      "tool": "source_fetch",
+      "input": "https://postgresql.org/docs/current/functions-datetime.html",
+      "already_consulted": [],
+      "refusal": "scope_source_not_allowed"
+    },
+    {
+      "name": "third-party redirect",
+      "tool": "redirect",
+      "input": "https://postgrespro.com/third-source",
+      "already_consulted": [],
+      "refusal": "scope_source_not_allowed"
+    },
+    {
+      "name": "web discovery",
+      "tool": "web_search",
+      "input": "PostgreSQL timestamp comparison",
+      "already_consulted": [],
+      "refusal": "scope_exact_pages_no_search"
+    },
+    {
+      "name": "scholar discovery",
+      "tool": "scholar_search",
+      "input": "PostgreSQL timestamp comparison",
+      "already_consulted": [],
+      "refusal": "scope_exact_pages_no_search"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "compliant",
+      "pre_render": "compliant-pre-render.md",
+      "persisted": "compliant-persisted.md",
+      "expected": "compliant-expected.json",
+      "admitted_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html",
+        "https://www.postgresql.org/docs/current/explicit-locking.html"
+      ],
+      "observed_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html",
+        "https://www.postgresql.org/docs/current/explicit-locking.html"
+      ],
+      "cited_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html"
+      ],
+      "unavailable": {},
+      "mission_outcome": "complete",
+      "delivery_quality": "usable_with_warning"
+    },
+    {
+      "name": "partial",
+      "pre_render": "partial-pre-render.md",
+      "persisted": "partial-persisted.md",
+      "expected": "partial-expected.json",
+      "admitted_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html"
+      ],
+      "observed_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html"
+      ],
+      "cited_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html"
+      ],
+      "unavailable": {
+        "https://www.postgresql.org/docs/current/explicit-locking.html": "timeout"
+      },
+      "mission_outcome": "complete",
+      "delivery_quality": "degraded"
+    },
+    {
+      "name": "too_long",
+      "pre_render": "too_long-pre-render.md",
+      "persisted": "too_long-persisted.md",
+      "expected": "too_long-expected.json",
+      "admitted_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html",
+        "https://www.postgresql.org/docs/current/explicit-locking.html"
+      ],
+      "observed_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html",
+        "https://www.postgresql.org/docs/current/explicit-locking.html"
+      ],
+      "cited_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html"
+      ],
+      "unavailable": {},
+      "mission_outcome": "validation_failed",
+      "delivery_quality": "failed"
+    },
+    {
+      "name": "22_sources",
+      "pre_render": "22_sources-pre-render.md",
+      "persisted": "22_sources-persisted.md",
+      "expected": "22_sources-expected.json",
+      "admitted_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html",
+        "https://www.postgresql.org/docs/current/explicit-locking.html"
+      ],
+      "observed_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html",
+        "https://www.postgresql.org/docs/current/explicit-locking.html",
+        "https://postgrespro.com/page/0",
+        "https://postgrespro.com/page/1",
+        "https://postgrespro.com/page/2",
+        "https://postgrespro.com/page/3",
+        "https://postgrespro.com/page/4",
+        "https://postgrespro.com/page/5",
+        "https://postgrespro.com/page/6",
+        "https://postgrespro.com/page/7",
+        "https://postgrespro.com/page/8",
+        "https://postgrespro.com/page/9",
+        "https://postgrespro.com/page/10",
+        "https://postgrespro.com/page/11",
+        "https://postgrespro.com/page/12",
+        "https://postgrespro.com/page/13",
+        "https://postgrespro.com/page/14",
+        "https://postgrespro.com/page/15",
+        "https://postgrespro.com/page/16",
+        "https://postgrespro.com/page/17",
+        "https://postgrespro.com/page/18",
+        "https://postgrespro.com/page/19"
+      ],
+      "cited_urls": [
+        "https://www.postgresql.org/docs/current/functions-datetime.html"
+      ],
+      "unavailable": {},
+      "mission_outcome": "validation_failed",
+      "delivery_quality": "failed"
+    }
+  ],
+  "file_sha256": {
+    "22_sources-expected.json": "261a6790793d2efd3c8249b0fa84df4f0b0db462a0da144c698edad516b33772",
+    "22_sources-persisted.md": "7ca225b9645230ea578f4e2ecd99807f280bb56c44286c43aece97c5d04de90e",
+    "22_sources-pre-render.md": "aae0f63096fa6cfb646d81f1c784ecfbf088d1948d820acac4447d238e683f37",
+    "actor-system.txt": "7af608fd09031d1c02e32d1c54af93e234b3f219e06322fd3e7c796733ce36f2",
+    "actor-user.txt": "57e8feb1ac834b63394e17dfe2098c775da309f160e912d79d24333b49d9ae60",
+    "canonical-contract.json": "163e7af36080b8440afe55f501b023cb2e3aba84e1b8644298fc0784167b5cb6",
+    "canonical-input.json": "c7644ceb7d0dc9b194a67a5b403a93606c8870515231581e07f77c123c8e2c28",
+    "compliant-expected.json": "5a1a5885de2e6dc82c8ccc9238604d051bade29d2e61a66a6f96de04b7920725",
+    "compliant-persisted.md": "29a4eee9e63efe0b2e9f6210ef5ed78d41abd08c211dbbdbe2db4410d90ab1be",
+    "compliant-pre-render.md": "aae0f63096fa6cfb646d81f1c784ecfbf088d1948d820acac4447d238e683f37",
+    "partial-expected.json": "3fd36c3e94c123c9a074d6d4ecf487a48ca5c1272fecd0d38457b14f87c88ed3",
+    "partial-persisted.md": "37c2a1d258f007c7a9d35e22434492967bc34d67c08c592ca18451330e625564",
+    "partial-pre-render.md": "0bc4f19f8951307827919834c258d7b49be458c36885d4514a4f77eaf6e89fd0",
+    "postgresql-authored.json": "310a0cdb38196e1ae1fc8e9ec0cee7eaef3206a98d0b51a8f176ef5927c05784",
+    "too_long-expected.json": "6d82a0a562b32fed266240ed8a3fc646797c7750fea455a34a9ab4b857c52437",
+    "too_long-persisted.md": "9d7d41e4a06b5ae2961ca3516154a8537af982a089f74cf41520ef5bf0dd9621",
+    "too_long-pre-render.md": "d81ac3ebb2a317c29cb24f4a2a919b49567c6fce2bef846025c3f23fc47e0434"
+  }
+}

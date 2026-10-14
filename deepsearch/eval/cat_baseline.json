@@ -1,0 +1,59 @@
+{
+  "_comment": "S85 m02 — the 2026-07-16 CAT baseline (decision #823, roadmap s84-s86 sec 3/4/6). The pre-fix scoresheet the kill-switch benchmark (s85-m03) re-dispatch must beat. Source: cmos/research/fix_or_retire_deep_dive_2026-07-16_raw.json current_runs. Used by benchmark.load_cat_baseline() for the go/no-go comparison and by the calibration test (reproduce these gap-marker counts from the stored CAT protocols once DATABASE_URL is available).",
+  "captured": "2026-07-16",
+  "baseline_usable_or_better": 1,
+  "mission_count": 5,
+  "thresholds": {
+    "usable_or_better_min": 4,
+    "gap_markers_max": 10,
+    "false_dead_rate_max": 0.05,
+    "telemetry_mismatches_max": 0
+  },
+  "runs": [
+    {
+      "cat_id": "CAT-R001",
+      "mission_uuid": "1f6a7b36-606e-4a6c-91a0-0e3e3d64124a",
+      "baseline_grade": "weak",
+      "baseline_gap_markers": 54,
+      "baseline_dead_cited": 11,
+      "baseline_distinct_cited": 41,
+      "headline_defect": "nngroup x5, digikey x2, wikipedia false-dead; Digi-Key section 100% gap markers"
+    },
+    {
+      "cat_id": "CAT-R002",
+      "mission_uuid": "50fdf0ae-61cd-45ba-b75c-1763dd23468f",
+      "baseline_grade": "unusable",
+      "baseline_gap_markers": 65,
+      "baseline_dead_cited": 11,
+      "baseline_distinct_cited": 34,
+      "headline_defect": "11/13 entity sections are heading shells; all 11 dead-marked URLs had substantive fetched bodies (false)"
+    },
+    {
+      "cat_id": "CAT-R003",
+      "mission_uuid": "e273cf44-56d8-4d98-8930-599b132a35d7",
+      "baseline_grade": "unusable",
+      "baseline_gap_markers": null,
+      "baseline_dead_cited": 6,
+      "baseline_distinct_cited": 54,
+      "headline_defect": "persisted result_markdown is CAT-R004's report (wrong-mission ship; s84-m03 identity assertion guards this class). Gap count n/a."
+    },
+    {
+      "cat_id": "CAT-R004",
+      "mission_uuid": "63c8463e-7295-44e5-9c31-e733196739bc",
+      "baseline_grade": "usable",
+      "baseline_gap_markers": 23,
+      "baseline_dead_cited": 6,
+      "baseline_distinct_cited": 55,
+      "headline_defect": "shipped delivery_quality='clean' despite 23 markers + a failed synthesis checkpoint"
+    },
+    {
+      "cat_id": "CAT-R005",
+      "mission_uuid": "ee32c5fe-d171-4bef-8ba2-a38d27ccfdfb",
+      "baseline_grade": "weak",
+      "baseline_gap_markers": 58,
+      "baseline_dead_cited": 18,
+      "baseline_distinct_cited": 35,
+      "headline_defect": "Zoro + Fastenal profiles zero surviving sentences; 186/186 sources tiered 'low'"
+    }
+  ]
+}

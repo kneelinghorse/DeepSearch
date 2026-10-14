@@ -1,0 +1,25 @@
+# BASELINE Tier Smoke Test - Sprint 11 Validation
+# Tests: LLM synthesis, quality gates, tier-appropriate finding targets
+mission_id: SMOKE-BASELINE-001
+title: Test BASELINE tier report quality
+objective: Verify BASELINE tier produces adequate findings with LLM synthesis
+research_depth: baseline
+success_criteria:
+  - Generates minimum 5 findings (BASELINE tier min_total_findings)
+  - Report includes synthesized Executive Summary
+  - Completes within 3 loops
+  - Sources from at least 2 unique domains
+deliverables:
+  - Synthesized markdown report in cmos/research/
+research_phases:
+  - phase: Initial Research
+    focus: Gather foundational information
+    questions:
+      - What are the key concepts?
+      - What are common use cases?
+context: |
+  This is a smoke test mission to validate Sprint 11 changes:
+  - B11.1: LLM synthesis pass in finalize_node
+  - B11.2: Depth-aware finding targets (baseline: 3/loop)
+  - B11.3: Quality gates (5 findings, 3 sources, 2 domains)
+  - B11.4: Gemini 2.5 Pro with 16384 thinking budget

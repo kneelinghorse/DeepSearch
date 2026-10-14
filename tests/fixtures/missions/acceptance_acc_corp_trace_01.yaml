@@ -1,0 +1,13 @@
+missionId: "ACC-CORP-TRACE-01"
+title: "Acceptance Corpus Traceability"
+objective: "Evaluate LANGGRAPH and RAG routing claims against the DeepSearch corpus and CMOS reviewer notes."
+successCriteria:
+  - "Trace every major claim back to corpus evidence"
+  - "Document limitations where corpus support is thin"
+deliverables:
+  - "Corpus trace table with at least 6 rows and columns: Claim, Corpus Evidence, Confidence, Gap"
+  - "Annotated bibliography of at least 6 sources"
+context:
+  background: "Primary gate contract for corpus-grounded traceability."
+researchDepth: "deep"
+maxLoops: 4

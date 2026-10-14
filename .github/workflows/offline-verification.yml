@@ -1,0 +1,45 @@
+name: Offline verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: offline-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-and-scope-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e ".[dev]"
+      - name: Run every unit test
+        run: |
+          set +e
+          python -m pytest tests/unit/ -o addopts='' --junitxml=unit-results.xml -q
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+            exit "$status"
+          fi
+          python scripts/check_unit_failure_baseline.py unit-results.xml
+      - name: Verify authored-scope boundary
+        run: |
+          python -m pytest \
+            tests/integration/test_s94_scope_pipeline.py \
+            tests/integration/test_s93_acceptance.py \
+            -o addopts='' -q
+      - name: Reject tracked credential literals
+        run: python scripts/check_no_credential_literals.py --tracked

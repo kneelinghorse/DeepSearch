@@ -1,0 +1,6 @@
+missionId: "DEPTH.1"
+title: "Alpha Depth Mission"
+objective: "Test alpha depth tier parsing"
+successCriteria:
+  - "Verify alpha depth is parsed correctly"
+researchDepth: "alpha"

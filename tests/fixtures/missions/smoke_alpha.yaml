@@ -1,0 +1,37 @@
+# ALPHA Tier Smoke Test - Sprint 11 Validation
+# Tests: Maximum finding targets, tables+code, full synthesis, contradiction detection
+mission_id: SMOKE-ALPHA-001
+title: Test ALPHA tier report quality
+objective: Verify ALPHA tier produces comprehensive findings with tables and code
+research_depth: alpha
+success_criteria:
+  - Generates minimum 20 findings (ALPHA tier min_total_findings)
+  - Report includes tables AND code examples
+  - Quality gates all pass
+  - Contradiction detection runs
+  - Sources from at least 4 unique domains
+deliverables:
+  - Fully synthesized markdown report with tables and code in cmos/research/
+research_phases:
+  - phase: Foundational Research
+    focus: Establish core concepts
+    questions:
+      - What are the fundamental principles?
+      - What terminology is essential?
+  - phase: Technical Deep Dive
+    focus: Implementation details
+    questions:
+      - What are the technical specifications?
+      - What code patterns are used?
+  - phase: Comparative Analysis
+    focus: Compare approaches
+    questions:
+      - How do different implementations compare?
+      - What are the trade-offs?
+context: |
+  This is an ALPHA tier smoke test for Sprint 11 validation:
+  - B11.1: Full LLM synthesis with structured output
+  - B11.2: Depth-aware targets (alpha: 7/loop, require_tables+code)
+  - B11.3: Quality gates (20 findings, 10 sources, 4 domains)
+  - B11.4: Gemini 2.5 Pro with 16384 thinking budget
+  - Alpha-specific: source diversity, contradiction detection

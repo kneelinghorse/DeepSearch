@@ -1,0 +1,271 @@
+{
+  "contract_version": "1.2",
+  "contract_schema_version": "1.2",
+  "compiler_revision": 3,
+  "contract_id": "798f6b83ee0f3cf4",
+  "compiled_at": "1970-01-01T00:00:00+00:00",
+  "origin": "canonical",
+  "mission_id": "S91-GOLDEN-01",
+  "project_id": null,
+  "title": "Cross-service compiler parity",
+  "objective": "Compare DeepSeek, OpenAI, and Gemini contract compilation.",
+  "background": "TraceLab and DeepSearch must compile the same authored mission.",
+  "focus": "Prove deterministic cross-service parity before provider migration.",
+  "success_criteria": [
+    "Compare DeepSeek and OpenAI compiler behavior",
+    "Include a comparison matrix",
+    "Do not include unsupported provider claims"
+  ],
+  "deliverables": [
+    "Annotated bibliography with at least 3 entries"
+  ],
+  "constraints": [
+    "Use primary provider documentation",
+    "Include a comparison matrix",
+    "Do not include unsupported provider claims"
+  ],
+  "excluded_domains": [
+    "example.com"
+  ],
+  "reference_titles": [
+    "OpenAI API documentation",
+    "DeepSeek API documentation"
+  ],
+  "authored_scope": {
+    "version": "authored-scope-v1",
+    "reference_urls": [
+      "https://platform.openai.com/docs",
+      "https://api-docs.deepseek.com/"
+    ],
+    "restriction": "unrestricted",
+    "allowed_urls": [],
+    "allowed_domains": [],
+    "min_words": null,
+    "max_words": null,
+    "max_sources": null
+  },
+  "authority_seed_domains": [
+    "platform.openai.com",
+    "api-docs.deepseek.com"
+  ],
+  "required_entities": [
+    "DeepSeek",
+    "OpenAI",
+    "Gemini"
+  ],
+  "excluded_entities": [
+    "Gemini"
+  ],
+  "named_entities": [
+    "DeepSeek",
+    "OpenAI"
+  ],
+  "named_entities_canonical": {},
+  "named_entities_disambiguation": {},
+  "named_entities_query_surfaces": {},
+  "entity_extraction_decisions": [
+    {
+      "entity": "DeepSeek",
+      "decision": "declared"
+    },
+    {
+      "entity": "OpenAI",
+      "decision": "declared"
+    },
+    {
+      "entity": "Gemini",
+      "decision": "declared"
+    },
+    {
+      "entity": "Gemini",
+      "decision": "dropped",
+      "reason": "excluded_entity"
+    },
+    {
+      "entity": "",
+      "decision": "extraction_path",
+      "reason": "skipped_declared_authoritative"
+    }
+  ],
+  "coverage_thresholds": {
+    "entity": 0.75,
+    "objective": 0.7
+  },
+  "validation_thresholds": {
+    "slot": 0.5
+  },
+  "research_depth": "baseline",
+  "objectives": [
+    {
+      "id": "objective-0",
+      "text": "Compare DeepSeek, OpenAI, and Gemini contract compilation.",
+      "source": "objective",
+      "required": false
+    },
+    {
+      "id": "objective-1",
+      "text": "Compare DeepSeek and OpenAI compiler behavior",
+      "source": "success_criteria",
+      "required": true
+    }
+  ],
+  "deliverable_schemas": [
+    {
+      "id": "deliverable-schema-1",
+      "kind": "comparison_table",
+      "title": "Provider comparison",
+      "format": "table",
+      "source_text": "authored expected_output_schema[1]: Provider comparison",
+      "min_items": null,
+      "minimum_citation_count": 3,
+      "columns": [
+        "Provider",
+        "Compiler behavior",
+        "Evidence"
+      ],
+      "allowed_values": [],
+      "required_sections": [
+        "Evidence gaps"
+      ],
+      "entity_extraction_required": false,
+      "entity_types": [],
+      "row_identifier_column": null,
+      "recommendation_required": false,
+      "evidence_gaps_section_required": false,
+      "corpus_reference_required": false,
+      "claim_to_evidence_mapping_required": false,
+      "limitations_section_required": false,
+      "notes": []
+    }
+  ],
+  "evidence_slots": [
+    {
+      "id": "slot-objective-1",
+      "kind": "objective_coverage",
+      "description": "Gather evidence that directly addresses: Compare DeepSeek and OpenAI compiler behavior",
+      "source": "success_criteria",
+      "target": {
+        "objective_id": "objective-1"
+      },
+      "required": true
+    },
+    {
+      "id": "slot-entity-deepseek",
+      "kind": "named_entity",
+      "description": "Cover named entity 'DeepSeek' with source-grounded evidence.",
+      "source": "named_entities",
+      "target": {
+        "entity": "DeepSeek",
+        "entity_name": "DeepSeek",
+        "objective_ids": [
+          "objective-1"
+        ]
+      },
+      "required": true
+    },
+    {
+      "id": "slot-entity-openai",
+      "kind": "named_entity",
+      "description": "Cover named entity 'OpenAI' with source-grounded evidence.",
+      "source": "named_entities",
+      "target": {
+        "entity": "OpenAI",
+        "entity_name": "OpenAI",
+        "objective_ids": [
+          "objective-1"
+        ]
+      },
+      "required": true
+    },
+    {
+      "id": "slot-deliverable-schema-1",
+      "kind": "deliverable_schema",
+      "description": "Satisfy structural deliverable 'Provider comparison'.",
+      "source": "deliverables",
+      "target": {
+        "schema_id": "deliverable-schema-1",
+        "format": "table",
+        "minimum_citation_count": 3,
+        "columns": [
+          "Provider",
+          "Compiler behavior",
+          "Evidence"
+        ],
+        "required_sections": [
+          "Evidence gaps"
+        ]
+      },
+      "required": true
+    }
+  ],
+  "acceptance_checks": [
+    {
+      "id": "check-objective-1",
+      "kind": "objective_coverage",
+      "description": "Objective must be substantively addressed: Compare DeepSeek and OpenAI compiler behavior",
+      "target": {
+        "objective_id": "objective-1"
+      },
+      "required": true
+    },
+    {
+      "id": "check-entity-deepseek",
+      "kind": "named_entity_coverage",
+      "description": "Named entity 'DeepSeek' must appear in grounded evidence or synthesis.",
+      "target": {
+        "entity": "DeepSeek"
+      },
+      "required": true
+    },
+    {
+      "id": "check-entity-openai",
+      "kind": "named_entity_coverage",
+      "description": "Named entity 'OpenAI' must appear in grounded evidence or synthesis.",
+      "target": {
+        "entity": "OpenAI"
+      },
+      "required": true
+    },
+    {
+      "id": "check-acceptance-gate-1",
+      "kind": "acceptance_gate",
+      "description": "Rendered output must satisfy: Do not include unsupported provider claims",
+      "target": {
+        "criterion": "Do not include unsupported provider claims",
+        "evaluation_stage": "post_synthesis"
+      },
+      "required": true
+    },
+    {
+      "id": "check-deliverable-schema-1",
+      "kind": "structural_output",
+      "description": "Output must satisfy the 'Provider comparison' structural contract.",
+      "target": {
+        "schema_id": "deliverable-schema-1",
+        "format": "table",
+        "minimum_citation_count": 3,
+        "columns": [
+          "Provider",
+          "Compiler behavior",
+          "Evidence"
+        ],
+        "required_sections": [
+          "Evidence gaps"
+        ]
+      },
+      "required": true
+    }
+  ],
+  "execution_budget": {
+    "research_depth": "baseline",
+    "deliverable_format": "markdown",
+    "max_loops": 3,
+    "min_loops": 0,
+    "search_results_per_query": 5,
+    "sources_per_loop": null,
+    "max_tokens_per_loop": 16000,
+    "depth_config": {},
+    "budget_fields": {}
+  },
+  "objective_coverage_section_required": true
+}

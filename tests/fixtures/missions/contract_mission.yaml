@@ -1,0 +1,18 @@
+missionId: "CONTRACT.1"
+title: "Contract Compilation Test"
+objective: "Compare Kadavath et al. 2022 against SAPLMA for evaluation design"
+successCriteria:
+  - "Cite Farquhar 2024 by name"
+  - "Explain how SAPLMA changes the scoring frame"
+deliverables:
+  - "Annotated bibliography of at least 12 papers"
+  - "Classification matrix with production/research/theoretical labels"
+context:
+  background: "Contract fixture for Sprint 27 contract compiler tests."
+  constraints:
+    - "Use corpus-backed evidence where available"
+  references:
+    - title: "Semantic Entropy Foundations"
+      url: "https://example.com/semantic-entropy"
+researchDepth: "deep"
+maxLoops: 4

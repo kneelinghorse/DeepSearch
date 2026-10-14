@@ -1,0 +1,9 @@
+{
+  "overall_coverage_score": 0.8,
+  "is_mission_complete": false,
+  "confidence_score": 0.0,
+  "aggregate_rationale": "The function {main()} and class {DataProcessor} were thoroughly documented. Configuration uses {key: value} format.",
+  "per_objective_scores": [
+    {"objective_id": "OBJ01", "score": 0.8, "reasoning": "Code analysis complete for {init()} method"}
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "mission_id": "S61-LOG2-ACCEPT-01",
+  "title": "PostgreSQL timestamps for lease validation",
+  "project_id": "5229e75e-8ad3-4ac5-94de-093a177562c6",
+  "status": "draft",
+  "objective": "Explain which PostgreSQL timestamp observation should validate a lease after a row-lock wait, using only the official PostgreSQL documentation.",
+  "success_criteria": [
+    "Compare CURRENT_TIMESTAMP/transaction_timestamp(), statement_timestamp(), and clock_timestamp() in one concise table, citing the official PostgreSQL date/time functions documentation.",
+    "Explain in one worked timeline why a lease check after a row-lock wait needs an actual current-time observation; cite the official explicit-locking documentation.",
+    "Deliver a 300\u2013500 word Markdown note using at most two distinct primary source pages, with citations and any uncertainty stated."
+  ],
+  "constraints": [
+    "Use only postgresql.org documentation. Stop after the two requested source pages; do not broaden into a general database review.",
+    "Preserve a useful partial result if either page cannot be retrieved."
+  ],
+  "references": [
+    {
+      "title": "PostgreSQL date/time functions",
+      "url": "https://www.postgresql.org/docs/current/functions-datetime.html"
+    },
+    {
+      "title": "PostgreSQL explicit locking",
+      "url": "https://www.postgresql.org/docs/current/explicit-locking.html"
+    }
+  ],
+  "deliverables": [
+    "One concise Markdown comparison note with the requested table and worked timeline."
+  ],
+  "deliverable_format": "markdown report",
+  "tags": [
+    "sprint-61",
+    "LOG-2",
+    "required-live-acceptance"
+  ],
+  "metadata": {
+    "acceptance_gate": "LOG-2",
+    "no_blind_rerun": true
+  }
+}

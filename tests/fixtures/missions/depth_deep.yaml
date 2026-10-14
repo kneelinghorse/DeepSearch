@@ -1,0 +1,6 @@
+missionId: "DEPTH.2"
+title: "Deep Depth Mission"
+objective: "Test deep depth tier parsing"
+successCriteria:
+  - "Verify deep depth is parsed correctly"
+depth: "DEEP"

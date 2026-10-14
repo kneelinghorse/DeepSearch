@@ -1,0 +1,13 @@
+missionId: "ACC-CANARY-RIIM-01"
+title: "Acceptance Canary R-IIM"
+objective: "Compare SAPLMA with Kadavath et al. 2022 and Farquhar et al. 2024 evidence for the R-IIM canary evaluation."
+successCriteria:
+  - "Preserve named entities including SAPLMA and Kadavath et al. 2022 in grounded analysis"
+  - "Explain where Farquhar et al. 2024 changes uncertainty evaluation behavior"
+deliverables:
+  - "Annotated bibliography of at least 8 sources"
+  - "Comparison table with at least 4 rows and columns: Technique, Signal, Evidence, Caveat"
+context:
+  background: "Sprint 28 canary contract for the historically sensitive R-IIM-style mission."
+researchDepth: "deep"
+maxLoops: 4

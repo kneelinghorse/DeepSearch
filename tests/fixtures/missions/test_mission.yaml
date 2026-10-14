@@ -1,0 +1,11 @@
+missionId: "TEST.0.1"
+title: "Test Research Mission"
+objective: "Validate DeepSearch integration pipeline"
+successCriteria:
+  - "Generates at least one finding"
+  - "Produces a markdown report"
+context:
+  background: "Integration test mission ensuring CLI and runner wiring works."
+  summary: "Check that the runner can execute a small mission."
+metadata:
+  tags: ["test", "integration"]

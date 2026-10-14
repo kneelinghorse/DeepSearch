@@ -1,0 +1,15 @@
+DeepSearch original source, documentation and explicitly reviewed first-party
+fixtures are licensed under LICENSE (MIT).
+
+Separately installed dependencies retain their own licenses. The versioned
+observations in docs/dependency_licenses.json identify package declarations and
+license-file hashes from the documented setup environment. That inventory is
+not a lockfile or a blanket grant to redistribute every package or its contents.
+The source export includes no installed dependency trees, wheels, source
+archives or model weights. API services and downloaded models have separate
+provider terms.
+
+Captured vendor documentation and private research evidence are excluded.
+References and hyperlinks do not relicense third-party text. The exact reviewed
+file list, byte hashes, modes and publication bases are recorded in the export
+receipt. A new file or changed fixture requires a new publication review.

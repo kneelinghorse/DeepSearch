@@ -1,0 +1,11 @@
+{
+  "overall_coverage_score": 0.8,
+  "is_mission_complete": false,
+  "confidence_score": 0.0,
+  "aggregate_rationale": "Good progress on research objectives with substantial evidence gathered.",
+  "per_objective_scores": [
+    {"objective_id": "OBJ01", "score": 0.8, "reasoning": "Well documented with citations"}
+  ]
+}
+
+Note: The score of {0.8} indicates substantial coverage. The function {analyze()} was reviewed.

@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.coverage
+htmlcov
+*.egg-info
+.eggs
+venv
+.venv
+ENV
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Project files not needed in container
+cmos/
+tests/
+docs/
+checkpoints/
+*.md
+*.log
+*.sqlite
+*.db
+.env
+.env.example
+Procfile
+runtime.txt
+.railwayignore

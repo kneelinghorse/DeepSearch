@@ -1,0 +1,12 @@
+missionId: "ACC-TABLE-COMP-01"
+title: "Acceptance Table Comparison"
+objective: "Compare RAG retrieval options across TAVILY, EXA, and SERPAPI for contract-aware DeepSearch loops."
+successCriteria:
+  - "Produce a decision-useful recommendation grounded in RAG evidence"
+  - "Identify where TAVILY, EXA, and SERPAPI differ on coverage and control"
+deliverables:
+  - "Comparison matrix with at least 5 rows and columns: Backend, Strengths, Weaknesses, Evidence, Recommendation"
+context:
+  background: "Primary gate contract for mandatory matrix output."
+researchDepth: "deep"
+maxLoops: 4

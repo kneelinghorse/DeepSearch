@@ -1,0 +1,17 @@
+{
+  "contract_version": "tracelab-mission-logs-v2",
+  "mission_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "attempt_count": 1,
+  "lease_owner": "controlled-worker",
+  "lease_token": "controlled-fixture-ownership-proof",
+  "logs": [
+    {
+      "event_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "sequence": 1,
+      "level": "INFO",
+      "message": "{\"event\":\"phase_started\",\"phase\":\"running\"}",
+      "source": "deepsearch:running",
+      "logged_at": "2026-09-30T12:00:00.000000Z"
+    }
+  ]
+}

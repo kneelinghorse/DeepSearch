@@ -1,0 +1,19 @@
+# Quality Gate Failure Test - Sprint 11 Validation
+# Tests: Quality gate warning behavior when thresholds aren't met
+mission_id: SMOKE-GATE-FAIL-001
+title: Test quality gate warning behavior
+objective: Test quality gate failure warning banner
+research_depth: alpha
+success_criteria:
+  - Research completes without crashing
+  - Report includes quality gate warning banner
+  - Warning lists specific failures
+context: |
+  This mission intentionally uses ALPHA tier thresholds with a narrow topic
+  and limited iterations to trigger quality gate failures. The test validates
+  that:
+  1. The system gracefully handles gate failures
+  2. A warning banner appears in the report
+  3. The specific failed gates are documented
+
+  Note: This mission is expected to NOT meet all quality gates.

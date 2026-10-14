@@ -1,0 +1,25 @@
+{
+  "as_of": "2026-09-19",
+  "currency": "USD",
+  "unit": "per_million_tokens",
+  "kind": "published_estimate_not_invoice",
+  "deepseek-flash": {
+    "source": "https://api-docs.deepseek.com/quick_start/pricing/",
+    "input": 0.3, "cached_input": 0.006, "output": 1.2,
+    "off_peak_multiplier": 0.5,
+    "peak_utc_weekdays": [[1, 4], [6, 10]],
+    "chinese_public_holidays_off_peak": true,
+    "cache_write_multiplier": 1.0
+  },
+  "gpt-5.6-luna": {
+    "source": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+    "input": 0.2, "cached_input": 0.02, "output": 1.2,
+    "long_context_threshold": 272000,
+    "long_context_input_multiplier": 2.0,
+    "long_context_output_multiplier": 1.5,
+    "cache_write_multiplier": 1.25
+  },
+  "retrieval_usd": null,
+  "retrieval_note": "Provider fees/credits not exposed by existing tool telemetry; no historical bill inferred.",
+  "human_repair_minutes": null
+}

@@ -1,0 +1,29 @@
+schemaType: "Mission"
+missionId: "TEST.1"
+title: "Valid Test Mission"
+objective: "Collect data about the newest APIs"
+context:
+  background: |
+    This mission validates that the loader can ingest a full-featured YAML document
+    and convert it into the AgentState format expected by LangGraph.
+  constraints:
+    - "Use only first-party documentation"
+    - "Prioritise 2025 information"
+  references:
+    - title: "Product Spec"
+      url: "https://example.com/spec"
+  notes:
+    owner: "qa"
+successCriteria:
+  - "Document API endpoints"
+  - "Capture authentication details"
+deliverableFormat: "markdown"
+maxLoops: 5
+researchPhases:
+  discovery:
+    title: "Initial discovery"
+    tasks:
+      - "Read overview"
+metadata:
+  deliverable_format: "json"
+  tags: ["validation", "loader"]

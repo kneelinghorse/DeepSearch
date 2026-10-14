@@ -1,0 +1,8 @@
+missionId: "DEPTH.4"
+title: "Depth in Metadata Mission"
+objective: "Test depth parsed from metadata fallback"
+successCriteria:
+  - "Verify depth can be read from metadata"
+metadata:
+  research_depth: "deep"
+  tags: ["depth-test"]

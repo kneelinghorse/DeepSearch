@@ -1,0 +1,14 @@
+Here is my evaluation of the research progress:
+
+{
+  "overall_coverage_score": 0.8,
+  "is_mission_complete": false,
+  "confidence_score": 0.0,
+  "aggregate_rationale": "Research is progressing well with good source coverage.",
+  "per_objective_scores": [
+    {"objective_id": "OBJ01", "score": 0.8, "reasoning": "Adequate coverage"},
+    {"objective_id": "OBJ02", "score": 0.8, "reasoning": "Sources verified"}
+  ]
+}
+
+Additional metadata: {"timestamp": "2025-01-15", "version": "1.0"}

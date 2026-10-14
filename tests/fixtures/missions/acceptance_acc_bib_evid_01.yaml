@@ -1,0 +1,17 @@
+missionId: "ACC-BIB-EVID-01"
+title: "Acceptance Bibliography Evidence Map"
+objective: "Map the evidence base for SAPLMA, CCS, and semantic entropy approaches used in agent evaluation."
+successCriteria:
+  - "Surface the strongest bibliography for SAPLMA and CCS"
+  - "Call out evidence gaps that still block downstream evaluation work"
+deliverables:
+  - "Annotated bibliography of at least 12 papers"
+  - "Evidence gap table with at least 5 rows and columns: Theme, Evidence, Gap, Next Step"
+context:
+  background: "Primary gate contract for bibliography-first evidence mapping."
+  required_entities:
+    - SAPLMA
+    - CCS
+    - semantic entropy
+researchDepth: "deep"
+maxLoops: 4

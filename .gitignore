@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CMOS Runtime Data (exclude from version control)
+cmos/db/cmos.sqlite
+cmos/db/*.bak
+cmos/db/*.sqlite-wal
+cmos/db/*.sqlite-shm
+cmos/db/snapshots/
+cmos/SESSIONS.jsonl
+cmos/dist/
+cmos/telemetry/events/*.jsonl
+cmos/runtime/boomerang/
+cmos/webhooks/failed/
+cmos/**/__pycache__/
+
+# Integration-test report artifacts — a fresh TEST.0.1_* file is written on
+# every pytest run against the report writer, so they accumulate in git status.
+cmos/research/TEST.0.1_*.md
+
+# Environment variables
+.env
+.env.local
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+deepsearch.log
+
+# LangGraph/LangChain
+.langgraph/
+checkpoints/
+*.db
