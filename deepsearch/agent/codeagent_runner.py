@@ -46,6 +46,7 @@ from deepsearch.domain_policy import domain_matches, normalize_domains
 from deepsearch.error_safety import safe_exception_details, safe_exception_text
 from deepsearch.mission.scope import AuthoredScope, ScopeAdmission
 
+from .citation_extraction import is_cited
 from .completion_control import CompletionController
 from .execution_control import (
     CancellationEvent,
@@ -54,6 +55,7 @@ from .execution_control import (
     raise_if_execution_cancelled,
     wait_for_execution_cancel,
 )
+from .quality_series import readable_source_urls
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +174,7 @@ _TRANSIENT_GENERATION_REASONS = frozenset(
 # S82 m03 (PD135) — stranded-draft recovery convention. When the agent
 # exhausts max_steps WITHOUT calling final_answer (the cross-store failure
 # class: report assembled in scratchpad but result.output empty / marker-less),
-# the runner recovers the best [cite:URL]-bearing scratchpad draft so a
+# the runner recovers the best cited scratchpad draft (is_cited) so a
 # substantive cited artifact ships instead of an empty stub. The outcome gate
 # grades that artifact from its independent quality evidence: a complete cited
 # fallback may ship with a warning, while zero-citation or truncated output
@@ -926,7 +928,8 @@ def build_codeagent_tools(
         reason = completion_controller.allow_retrieval(gap, scratchpad_bundle.state)
         if reason:
             _log(tool_name, url=url, status="error", error_category=reason,
-                 status_code=0, network_requested=False, stored_access=True, result_count=0)
+                 status_code=0, network_requested=False, stored_access=True, result_count=0,
+                 cited_draft_available=bool(completion_controller.retained_draft))
         return reason
 
     def _int_value(value: Any) -> int:
@@ -1260,7 +1263,9 @@ def build_codeagent_tools(
             refused = _retrieval_refusal("source_fetch", gap, url)
             if refused:
                 return {"text": "", "status": "error", "status_code": 0,
-                        "error": refused, "final_url": url, "network_requested": False}
+                        "error": refused, "final_url": url, "network_requested": False,
+                        "message": (completion_controller.refusal_message(refused)
+                                    if completion_controller is not None else refused)}
         network_requested = False
         stored_access = cached is not None or bool(start or query)
         out: dict[str, Any]
@@ -1460,6 +1465,12 @@ def build_codeagent_tools(
                     fetched_cache[alias] = out
             fetched_cache[url] = out
             fetched_cache[final_url] = out
+            # S98 m06 — every exact URL whose successful fetch resolved here.
+            # Collection membership reads it; readability stays keyed by url.
+            redirected_from = sorted(
+                alias for alias, previous in fetched_cache.items()
+                if alias != final_url and str(previous.get("final_url")) == final_url
+            )
             body_text = str(fetched_text)
             entry = {
                 "url": final_url,
@@ -1478,6 +1489,8 @@ def build_codeagent_tools(
                     high_authority_domains=bound_high_authority_domains,
                 ),
             }
+            if redirected_from:
+                entry["redirected_from"] = redirected_from
             _accumulate_source(
                 entry,
                 target=sources_fetched,
@@ -1509,7 +1522,9 @@ def build_codeagent_tools(
         raise_if_execution_cancelled(bound_cancel_event)
         refused = _retrieval_refusal("url_liveness", gap, url)
         if refused:
-            return {"alive": None, "status_code": 0, "final_url": url, "error": refused}
+            return {"alive": None, "status_code": 0, "final_url": url, "error": refused,
+                    "message": (completion_controller.refusal_message(refused)
+                                if completion_controller is not None else refused)}
         timeout_s = _bounded_tool_timeout(timeout_s, URL_LIVENESS_MAX_TIMEOUT_S)
         out: dict[str, Any]
         scope_reason = admission.refusal(url)
@@ -1753,11 +1768,14 @@ def build_codeagent_tools(
         whether to keep retrieving or finalize. (S79 m02.a, PD97.)
 
         Returns artifact/content assessments and satisfied/missing requirements.
-        For word-bounded missions, report_word_budget estimates the full rendered
-        report including its wrapper. Revise over/under-length drafts and recheck
-        before final_answer; the final persisted artifact remains authoritative.
-        A null ``shortfall_score`` means unassessed; format labels do not require
-        matching headings. Citation presence does not establish claim support.
+        Each missing requirement has one entry in ``remedies`` saying how to
+        satisfy it; ``heading_rule`` explains how content deliverables bind
+        section headings. For word-bounded missions, report_word_budget
+        estimates the full rendered report including its wrapper. Revise
+        over/under-length drafts and recheck before final_answer; the final
+        persisted artifact remains authoritative. A null ``shortfall_score``
+        means unassessed; format labels do not require matching headings.
+        Citation presence does not establish claim support.
 
         Args:
             draft_markdown: The current draft as a single Markdown string.
@@ -1768,8 +1786,13 @@ def build_codeagent_tools(
             draft_len=len(draft_markdown) if isinstance(draft_markdown, str) else 0,
             status="ok",
         )
-        assessment = _completeness_check_impl(draft_markdown, list(bound_deliverable_spec))
+        # S99 m02: only this agent-facing call asks for remedies; the finalize
+        # path and the controller keep the default coverage output.
+        assessment = _completeness_check_impl(
+            draft_markdown, list(bound_deliverable_spec), remedies=True,
+        )
         if completion_controller is not None:
+            completion_controller.record_coverage_check(draft_markdown, assessment)
             word_budget = completion_controller.check_report_word_budget(draft_markdown)
             if word_budget:
                 assessment["report_word_budget"] = word_budget
@@ -2099,7 +2122,11 @@ def build_default_model(
     from smolagents.models import REMOVE_PARAMETER  # type: ignore[import-untyped]
 
     from deepsearch.config import DeepSearchSettings
-    from deepsearch.llm.runtime import ModelConfigurationError, resolve_effective_model
+    from deepsearch.llm.runtime import (
+        ModelConfigurationError,
+        provider_http_client,
+        resolve_effective_model,
+    )
 
     configured = settings if settings is not None else DeepSearchSettings.load()
     if api_key is not None:
@@ -2128,6 +2155,7 @@ def build_default_model(
             client_kwargs={
                 "timeout": selected.request_timeout,
                 "max_retries": OPENAI_CLIENT_MAX_RETRIES,
+                "http_client": provider_http_client(selected.request_timeout),
             },
         )
         model.effective_config = selected.public_metadata()
@@ -2512,23 +2540,24 @@ def _has_unresolved_final_answer_wrapper(text: str) -> bool:
 
 
 def _recover_stranded_draft(scratchpad: Mapping[str, str]) -> str | None:
-    """Return the best ``[cite:URL]``-bearing scratchpad draft, or None.
+    """Return the best cited scratchpad draft, or None.
 
     Prefers the conventional :data:`SCRATCHPAD_RECOVERY_KEY` (``report_draft``)
-    when it carries markers; otherwise falls back to the LONGEST cited value
-    across the scratchpad (the agent may have stashed its assembled draft under
-    a different key). Returns None when no scratchpad value carries a marker —
-    nothing recoverable, leaving the empty/marker-less output for the m01 gate.
+    when it is cited; otherwise falls back to the LONGEST cited value across the
+    scratchpad (the agent may have stashed its assembled draft under a different
+    key). Cited is :func:`is_cited`, so numbered-only drafts count (S100 m03).
+    Returns None when no scratchpad value is cited — nothing recoverable,
+    leaving the empty/uncited output for the m01 gate.
     """
     if not scratchpad:
         return None
     preferred = scratchpad.get(SCRATCHPAD_RECOVERY_KEY)
-    if isinstance(preferred, str) and _has_cite_markers(preferred):
+    if isinstance(preferred, str) and is_cited(preferred):
         return preferred
     best: str | None = None
     best_len = 0
     for value in scratchpad.values():
-        if isinstance(value, str) and _has_cite_markers(value) and len(value) > best_len:
+        if isinstance(value, str) and len(value) > best_len and is_cited(value):
             best = value
             best_len = len(value)
     return best
@@ -2693,6 +2722,11 @@ def _generation_failure_classification_unchecked(
             status=generic_client_status,
         )
 
+    from deepsearch.llm.runtime import ProviderResponseError
+
+    # The SDK wraps this provider-side failure in a connection error.
+    if any(isinstance(item, ProviderResponseError) for item in chain):
+        return classified("server", "class")
     class_text = " ".join(type(item).__name__.lower() for item in chain)
     if "timeout" in class_text:
         return classified("timeout", "class")
@@ -2869,6 +2903,8 @@ def run_codeagent_synthesis(
         completion_controller=controller,
         scope_admission=scope_admission,
     )
+    # S98 m05 — the unread-source feedback reads the live grounding sources.
+    controller.readable_sources = lambda: readable_source_urls(bundle.sources_collected)
     raise_if_execution_cancelled(resolved_cancel_event)
     bound_model = model if model is not None else build_default_model()
     observed_attempts = getattr(bound_model, "provider_attempts", [])
@@ -3129,10 +3165,12 @@ def run_codeagent_synthesis(
                     generation_recovery_result = "empty"
                 elif unresolved_wrapper:
                     generation_recovery_result = "invalid_wrapper"
-                elif not _has_cite_markers(normalized_text):
+                elif not is_cited(normalized_text):
                     generation_recovery_result = "uncited"
                 else:
                     generation_recovery_result = "success"
+                    if not _has_cite_markers(normalized_text):
+                        controller.numbered_cited_events["recovery_accepted"] += 1
                     generation_error_recovered = True
                     error = None
                     error_transient = False
@@ -3186,18 +3224,27 @@ def run_codeagent_synthesis(
 
     # S82 m03 / S92 m07 — stranded-draft recovery. When max-step exhaustion or
     # a mid-run generation failure leaves no cited final_answer, salvage the
-    # best [cite:URL]-bearing scratchpad draft instead of an empty stub.
+    # best cited scratchpad draft (is_cited) instead of an empty stub.
     # This does NOT mask the failure: hit_max_steps/self_terminated are
     # unchanged, so the outcome gate retains the max-step warning while grading
     # the recovered draft from its independent citation/truncation evidence. If
     # nothing cited is recoverable, the empty/marker-less output stands and the
     # gate fails it.
     recovered_from_scratchpad = False
-    if (
-        hit_max_steps or generation_failure_error is not None
-    ) and not _has_cite_markers(output_text):
-        salvaged = controller.retained_draft or _recover_stranded_draft(bundle.scratchpad)
-        if salvaged:
+    if hit_max_steps or generation_failure_error is not None:
+        literal = _has_cite_markers(output_text)
+        # S100 m03: a numbered-cited raw-Markdown output is the newer synthesized
+        # artifact; keep it, as a [cite:URL]-cited one always was. Code that
+        # still wraps a report is salvaged as before.
+        numbered = (not literal and is_cited(output_text)
+                    and not _has_unresolved_final_answer_wrapper(output_text))
+        salvaged = None if literal else (
+            controller.retained_draft or _recover_stranded_draft(bundle.scratchpad)
+        )
+        if numbered:
+            if salvaged and salvaged != output_text:
+                controller.numbered_cited_events["salvage_skipped"] += 1
+        elif salvaged:
             logger.warning(
                 "CodeAgent synthesis: no cited final_answer after terminal failure; "
                 "recovered a %d-char scratchpad draft (recovered_from_scratchpad)",

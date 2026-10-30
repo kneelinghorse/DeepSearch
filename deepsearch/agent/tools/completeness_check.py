@@ -28,6 +28,22 @@ Format labels do not require a matching content heading; attached content or
 evidence requirements still apply. This is a structural coverage check, not
 claim-level evidence validation.
 
+S98 m03 repaired three false-MISSING classes from real reports: a tail boundary
+that left only an article ("A mapping memo" → "A"), a qualified Markdown artifact
+("One concise Markdown comparison note"), and a table deliverable whose declared
+columns sit in a table under an unrelated heading. It also stopped one-letter
+tokens (a possessive's "s") from binding headings, which had hidden a deleted
+section behind "## References". S98 m08 lets a deliverable that names the source
+list ("Full source list ...", "Bibliography") bind the reference-list section,
+which a live run delivered as "## References" and the gate scored missing.
+
+S99 m02 made heading tokens symmetric with deliverable tokens: a leading section
+number ("1b.", "3.1a") and one-letter tokens no longer count, so a substantive
+section titled with a deliverable's lead phrase binds it under any such number. It
+also added opt-in remedies for the agent-facing tool only. Paid run STIG-002
+delivered all seven deliverables under headings that named their subjects, and
+four scored missing; the agent was never told which heading words bind.
+
 DSV-045 (live, 2026-06-15) added a descendant rollup: a ``##`` deliverable
 heading whose prose lives entirely under ``###`` children was scored MISSING
 (its own body was empty), failing a complete 3.5k-word report 0/4. A matched
@@ -82,6 +98,7 @@ _MD_EMPHASIS_RE = re.compile(r"^\**(.*?)\**$")
 # never for display; stripping parens here does not touch body content.
 _PARENTHETICAL_RE = re.compile(r"\s*\([^)]*\)\s*")
 _WHITESPACE_RE = re.compile(r"\s+")
+_ARTICLE_ONLY = frozenset({"", "a", "an", "the"})
 
 
 def _canonical_heading(bullet: str) -> str:
@@ -91,10 +108,15 @@ def _canonical_heading(bullet: str) -> str:
     # S81 m01.b (PD116a): strip parentheticals BEFORE boundary-word
     # truncation. See _PARENTHETICAL_RE comment block above.
     text = _PARENTHETICAL_RE.sub(" ", text).strip()
-    # Stop at the first prepositional / clausal boundary.
-    head_match = _HEADING_TAIL_BOUNDARIES.search(text)
-    if head_match:
-        text = text[: head_match.start()].strip()
+    # Stop at the first prepositional / clausal boundary that leaves a noun.
+    # S98 m03: "A mapping memo: ..." matched the boundary word "mapping" and
+    # reduced to "A"; a cut that leaves only an article is skipped instead.
+    # Colons and sentence ends stay non-boundaries (DSV-045 reversion).
+    for head_match in _HEADING_TAIL_BOUNDARIES.finditer(text):
+        head = text[: head_match.start()].strip()
+        if head.rstrip(".:;,—-").lower() not in _ARTICLE_ONLY:
+            text = head
+            break
     # Strip trailing punctuation that would defeat substring matching.
     text = text.rstrip(".:;,—-")
     # Collapse interior double-whitespace introduced by paren stripping
@@ -183,7 +205,11 @@ def _heading_tokens(text: str) -> list[str]:
 
 
 def _canonical_tokens(canonical: str) -> list[str]:
-    return [t for t in _heading_tokens(canonical) if t not in _HEADING_STOPWORDS]
+    # S98 m03: one-letter tokens (the "s" of a possessive) substring-match most
+    # headings, as the parenthetical-noise guard already notes; drop them too.
+    return [
+        t for t in _heading_tokens(canonical) if t not in _HEADING_STOPWORDS and len(t) > 1
+    ]
 
 
 def _overlap_floor(n: int) -> int:
@@ -240,13 +266,27 @@ def _token_matches(needle: str, heading_token: str) -> bool:
     return _depluralize(needle) in _depluralize(heading_token)
 
 
+# S99 m02: a leading section number ("3", "3.1a", "1b.", "11a.", "6)") or a
+# roman-numeral or single-letter label ("IV.", "B.") is numbering, not content.
+_SECTION_NUMBER_PREFIX_RE = re.compile(
+    r"^\s*(?:\d+[a-z]?(?:\.\d+[a-z]?)*[.)]?|[IVXLC]+[.)]|[A-Za-z][.)])\s+"
+)
+
+
 def _heading_content_tokens(heading_text: str) -> list[str]:
     """Heading tokens that carry meaning — drop stopwords and pure-digit section
-    numbers (``"## 9. Recommendations"`` → ``["recommendations"]``)."""
+    numbers (``"## 9. Recommendations"`` → ``["recommendations"]``).
+
+    S99 m02 made this symmetric with ``_canonical_tokens``: a leading
+    section-number prefix and one-letter tokens are dropped too. Such a token can
+    never match a deliverable token, yet it raised the binding floor, so a heading
+    made of a deliverable's own lead phrase failed under "1b." or beside "Plan B".
+    Roman numerals are stripped only as a prefix, never as tokens elsewhere.
+    """
     return [
         t
-        for t in _heading_tokens(heading_text)
-        if t not in _HEADING_STOPWORDS and not t.isdigit()
+        for t in _heading_tokens(_SECTION_NUMBER_PREFIX_RE.sub("", heading_text))
+        if t not in _HEADING_STOPWORDS and not t.isdigit() and len(t) > 1
     ]
 
 
@@ -451,14 +491,71 @@ def _extract_min_entity_count(bullet: str) -> int | None:
     return None
 
 
+# S98 m03: a table deliverable that names its required columns ("Required columns:
+# A, B" / "with columns A, B") is delivered by a Markdown table whose header row
+# carries every named column and which has a non-placeholder data row, whatever
+# heading it sits under (M5's mapping table sat under "## 4. Comparison Matrix").
+# Commas separate names, so "or" inside a name ("Scores or not") stays whole.
+_DECLARED_COLUMNS_RE = re.compile(r"\bcolumns?\s*:?\s+(?P<columns>.+)$", re.IGNORECASE)
+
+
+def _declared_column_names(bullet: str) -> list[str]:
+    """The column names a deliverable declares, as written, that carry a content token."""
+    match = _DECLARED_COLUMNS_RE.search(bullet)
+    if not match:
+        return []
+    names = (
+        re.sub(r"^\s*(?:and|or)\s+", "", name, flags=re.I).strip()
+        for name in match.group("columns").strip().rstrip(".").split(",")
+    )
+    return [name for name in names if _canonical_tokens(name)]
+
+
+def _declared_columns(bullet: str) -> list[list[str]]:
+    """Content tokens of each column a deliverable names; [] unless it names two."""
+    columns = [_canonical_tokens(name) for name in _declared_column_names(bullet)]
+    return columns if len(columns) >= 2 else []
+
+
+def _table_delivers_columns(draft_markdown: str, columns: list[list[str]]) -> bool:
+    lines = list(_content_lines(draft_markdown))
+    for idx in range(len(lines) - 1):
+        if not (_TABLE_ROW_RE.match(lines[idx]) and _TABLE_SEPARATOR_RE.match(lines[idx + 1])):
+            continue
+        header = [set(_heading_tokens(cell)) for cell in lines[idx].strip().strip("|").split("|")]
+        if not all(any(set(column) <= cell for cell in header) for column in columns):
+            continue
+        for row in lines[idx + 2:]:
+            if not _TABLE_ROW_RE.match(row) or _TABLE_SEPARATOR_RE.match(row):
+                break
+            if _strip_placeholders(row.replace("|", " ")).strip(" -—–*_"):
+                return True
+    return False
+
+
 # Only the declared artifact vocabulary is special. A topic such as
 # "Report generation risks" remains an ordinary content requirement.
+# S98 m03: an optional count word and one short qualifier, then one optional
+# word before the noun ("One concise Markdown comparison note"). The tail check
+# below still returns "Five Markdown report sections" to content.
 _ARTIFACT_RE = re.compile(
-    r"^(?:a\s+)?Markdown(?:\s+research)?\s+report(?=$|[. :]|\s)", re.IGNORECASE
+    r"^(?:(?:a|an|one)\s+)?(?:[a-z-]+\s+)?Markdown(?:\s+[a-z-]+)?\s+(?:report|note)"
+    r"(?=$|[. :]|\s)",
+    re.IGNORECASE,
 )
 _ARTIFACT_TAIL_RE = re.compile(r"^\s*(?:with|including|covering|about|on)\s+", re.I)
 _EVIDENCE_REQUIREMENT_RE = re.compile(
     r"^(?:resolving\s+)?citations?(?:\s+resolving)?(?:\s+to\s+evidence)?[.]?$", re.I
+)
+# The report's reference-list section, which _report_prose keeps out of prose.
+_REFERENCE_HEADING_RE = re.compile(r"(?:\d+[.)]?\s*)?(?:references|bibliography|sources)", re.I)
+# S98 m08: a deliverable whose lead noun phrase is the source list is delivered by
+# that section (decision 1015). Anchored like _ARTIFACT_RE, so "Evidence and source
+# list" or "Sources of funding" never bind it.
+_SOURCE_LIST_RE = re.compile(
+    r"^(?:(?:a|an|the)\s+)?(?:[a-z-]+\s+)?(?:(?:source|reference)s?\s+list"
+    r"|list\s+of\s+(?:sources|references)|bibliography|works\s+cited)\b",
+    re.IGNORECASE,
 )
 
 
@@ -495,10 +592,7 @@ def _report_prose(markdown: str) -> str:
             continue
         heading = _HEADING_LINE_RE.match(line)
         if heading:
-            in_references = bool(re.fullmatch(
-                r"(?:\d+[.)]?\s*)?(?:references|bibliography|sources)",
-                heading.group(2).strip(), re.I,
-            ))
+            in_references = bool(_REFERENCE_HEADING_RE.fullmatch(heading.group(2).strip()))
             continue
         if not in_references:
             lines.append(line)
@@ -514,13 +608,91 @@ def _has_evidence_signal(markdown: str) -> bool:
     return bool(references.intersection(re.findall(r"\[(\d+)\]", prose)))
 
 
+# ---------------------------------------------------------------------------
+# S99 m02 — opt-in coverage remedies. Only the agent-facing tool asks for them.
+# Each missing requirement gets exactly one remedy, decided by the same split of
+# the deliverables the verdict uses. The finalize path and the completion
+# controller keep the default output, so persisted coverage is unchanged.
+# ---------------------------------------------------------------------------
+
+HEADING_RULE = (
+    "A content deliverable counts only under the Markdown heading of the section that "
+    "delivers it. If a missing deliverable is already in the draft under another heading, "
+    "retitle that heading with the words given. A section number such as 3, 3.1 or 1b is "
+    "fine; any other added word, including a parenthetical, can stop the match."
+)
+# The lead phrase ends at the canonical heading's first colon, semicolon, comma or
+# spaced dash. A ". " is no cut: it would turn "Dr. Smith's critique" into "Dr".
+_LEAD_PHRASE_CUT_RE = re.compile(r"[:;,]|\s[—–-]\s")
+_ARTIFACT_REMEDY = {
+    "kind": "artifact",
+    "advice": (
+        f"Write substantive report prose: at least {MIN_SECTION_WORDS} words outside "
+        "headings, code blocks and the reference list, or a citation."
+    ),
+}
+_CITATIONS_REMEDY = {
+    "kind": "citations",
+    "advice": "Cite at least one source in the report text with a [cite:URL] marker.",
+}
+
+
+def _lead_phrase(canonical: str) -> str:
+    """The words that make a section heading bind this deliverable."""
+    head = _LEAD_PHRASE_CUT_RE.split(canonical, maxsplit=1)[0].strip()
+    return head if _canonical_tokens(head) else canonical
+
+
+def _content_remedy(
+    canonical: str,
+    min_count: int | None,
+    column_names: list[str],
+    bound_heading: str | None,
+    entity_count: int,
+) -> dict[str, Any]:
+    """How a content requirement can be satisfied, used only if it is missing."""
+    if min_count is not None:
+        return {
+            "kind": "count", "minimum": min_count, "found": entity_count,
+            "advice": (
+                f"Give at least {min_count} entries, counted as table rows, ### subsections "
+                f"or numbered items across the whole draft; it has {entity_count}."
+            ),
+        }
+    words = _lead_phrase(canonical)
+    if column_names:
+        return {
+            "kind": "columns", "columns": column_names, "words": words,
+            "advice": (
+                "Give a Markdown table whose header names every one of these columns, with "
+                f"at least one filled row: {', '.join(column_names)}. A substantive section "
+                f'titled "{words}" also counts.'
+            ),
+        }
+    if bound_heading is not None:
+        # Retitling is the wrong advice when a heading already binds.
+        return {
+            "kind": "expand", "heading": bound_heading,
+            "advice": (
+                f'The section "{bound_heading}" matches but is too thin or is a gap note. '
+                "Expand it with substantive, cited content."
+            ),
+        }
+    return {
+        "kind": "heading", "words": words,
+        "advice": f'Title the section that delivers it "{words}".',
+    }
+
+
 def _coverage_result(
-    artifacts: list[dict[str, Any]], content: list[dict[str, Any]],
+    artifacts: list[dict[str, Any]],
+    content: list[dict[str, Any]],
+    remedies: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     requirements = artifacts + content
     satisfied = [r["requirement"] for r in requirements if r["satisfied"]]
     missing = [r["requirement"] for r in requirements if not r["satisfied"]]
-    return {
+    result = {
         "semantics_version": 2,
         "assessment_status": "assessed" if requirements else "unassessed",
         "content_status": "assessed" if content else "unassessed",
@@ -530,11 +702,23 @@ def _coverage_result(
         "missing": missing,
         "shortfall_score": round(len(missing) / len(requirements), 3) if requirements else None,
     }
+    if remedies is not None:
+        # ``remedies`` is aligned with ``artifacts + content``; the result keeps
+        # one per missing requirement, in ``missing`` order.
+        result["remedies"] = [
+            {"requirement": r["requirement"], **remedy}
+            for r, remedy in zip(requirements, remedies, strict=True)
+            if not r["satisfied"]
+        ]
+        result["heading_rule"] = HEADING_RULE
+    return result
 
 
 def completeness_check(
     draft_markdown: str,
     deliverable_spec: Sequence[str] | None = None,
+    *,
+    remedies: bool = False,
 ) -> dict[str, Any]:
     """Surface which named deliverables are present vs missing in the draft.
 
@@ -547,7 +731,10 @@ def completeness_check(
       floor ``min(ceil(N/2), #heading_content_tokens)`` — S83 m04 + DSV-045
       follow-up; plural/singular-tolerant) OR its parenthetical sub-terms bind to
       a real parsed Markdown heading whose section is substantive (clears the
-      non-placeholder word floor OR carries an inline citation signal).
+      non-placeholder word floor OR carries an inline citation signal); OR
+    * its lead noun phrase names the source list (source or reference list,
+      list of sources, bibliography, works cited) and a section headed
+      References, Bibliography or Sources is substantive (S98 m08).
 
     Prose echoes, inline bold labels, and footer restatements of the spec do
     NOT satisfy — the match is heading-scoped, not full-body (S82 m04, PD135);
@@ -566,6 +753,10 @@ def completeness_check(
             the agent's working draft.
         deliverable_spec: deliverable / success-criteria bullets from the
             mission contract (resolved by ``resolve_deliverables``).
+        remedies: S99 m02. When True, the result also carries ``remedies``, one
+            per missing requirement in ``missing`` order (``heading``, ``expand``,
+            ``count``, ``columns``, ``citations`` or ``artifact``), and the
+            ``heading_rule`` sentence. Only the agent-facing tool passes it.
 
     Returns:
         Versioned artifact and content assessments, compatible satisfied/missing
@@ -574,9 +765,9 @@ def completeness_check(
     """
     if not isinstance(draft_markdown, str):
         logger.warning("completeness_check: invalid draft; coverage unassessed")
-        return _coverage_result([], [])
+        return _coverage_result([], [], [] if remedies else None)
     if not deliverable_spec or isinstance(deliverable_spec, (str, bytes)):
-        return _coverage_result([], [])
+        return _coverage_result([], [], [] if remedies else None)
 
     draft_markdown = _coverage_body(draft_markdown)
     artifacts: list[dict[str, Any]] = []
@@ -614,12 +805,14 @@ def completeness_check(
             else:
                 content_bullets.append(tail)
 
-    # Build the (canonical heading, min_entity_count, parenthetical_tokens) spec,
-    # deduped by canonical heading. The RAW bullet's parenthetical tokens are
-    # threaded here (S83 m04 CASE 2) because the bullet is discarded after this
-    # loop; satisfied/missing still carry the CANONICAL string (so the
-    # outcome.py / protocol.py count consumers are unaffected).
-    specs: list[tuple[str, int | None, list[str]]] = []
+    # Build the (canonical heading, min_entity_count, parenthetical_tokens,
+    # declared_columns, names_source_list) spec, deduped by canonical heading. The
+    # RAW bullet's parenthetical tokens, column names and source-list lead are
+    # threaded here (S83 m04 CASE 2, S98 m03, S98 m08) because the bullet is
+    # discarded after this loop; satisfied/missing still carry the CANONICAL string
+    # (so the outcome.py / protocol.py count consumers are unaffected). The bullet
+    # itself rides along for the S99 m02 remedies.
+    specs: list[tuple[str, int | None, list[str], list[list[str]], bool, str]] = []
     seen: set[str] = set()
     for bullet in content_bullets:
         if not isinstance(bullet, str):
@@ -628,15 +821,24 @@ def completeness_check(
         if not canonical or canonical in seen:
             continue
         seen.add(canonical)
-        specs.append(
-            (canonical, _extract_min_entity_count(bullet), _parenthetical_tokens(bullet))
-        )
+        lead = _MD_EMPHASIS_RE.sub(r"\1", _LEADING_LIST_RE.sub("", bullet).strip())
+        specs.append((
+            canonical, _extract_min_entity_count(bullet), _parenthetical_tokens(bullet),
+            _declared_columns(bullet), bool(_SOURCE_LIST_RE.match(lead)), bullet,
+        ))
 
     sections = _parse_sections_struct(draft_markdown)
     entity_count = _count_entity_units(draft_markdown)
 
+    # Remedies aligned with artifacts + content; evidence holds only citation
+    # presence requirements until the content specs are appended below.
+    candidates = (
+        [_ARTIFACT_REMEDY] * len(artifacts) + [_CITATIONS_REMEDY] * len(evidence)
+        if remedies else None
+    )
     content = evidence
-    for canonical, min_count, paren_tokens in specs:
+    for canonical, min_count, paren_tokens, columns, source_list, bullet in specs:
+        bound_heading: str | None = None
         if min_count is not None:
             # Quantity deliverable — scored by actual structural entity count,
             # immune to prose claiming the threshold was met.
@@ -645,13 +847,17 @@ def completeness_check(
             ok = False
             for idx, (lvl, heading, body) in enumerate(sections):
                 # Bind via canonical-token OR parenthetical-token overlap (S83
-                # m04), AND-ed with substance so a reworded heading over a stub
-                # body still scores missing.
+                # m04), or a source list via the reference-list heading (S98 m08),
+                # AND-ed with substance so a reworded heading over a stub body
+                # still scores missing.
                 if not (
                     _heading_matches(canonical, heading)
                     or _tokens_clear_floor(paren_tokens, heading)
+                    or (source_list and _REFERENCE_HEADING_RE.fullmatch(heading.strip()))
                 ):
                     continue
+                if bound_heading is None:
+                    bound_heading = heading
                 # The section's OWN body keeps the full citation-OR-words rule.
                 if _section_is_substantive(body):
                     ok = True
@@ -682,9 +888,16 @@ def completeness_check(
                 if _section_is_substantive(rolled):
                     ok = True
                     break
+            if not ok and columns:
+                ok = _table_delivers_columns(draft_markdown, columns)
         content.append({"requirement": canonical, "kind": "content", "satisfied": ok})
+        if candidates is not None:
+            candidates.append(_content_remedy(
+                canonical, min_count, _declared_column_names(bullet) if columns else [],
+                bound_heading, entity_count,
+            ))
 
-    return _coverage_result(artifacts, content)
+    return _coverage_result(artifacts, content, candidates)
 
 
 __all__ = ["completeness_check"]

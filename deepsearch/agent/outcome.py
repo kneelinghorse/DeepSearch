@@ -132,6 +132,10 @@ SOFT_ORPHAN = 3
 MIN_REPORT_WORDS = 200
 CRITIQUE_DEGRADED_RATIO = 0.20
 CRITIQUE_FAILED_RATIO = 0.50
+# S98 m04 (decision 1001): contradicted anchors degrade only as a pattern — at
+# least this many, making up at least one fifth of supported + contradicted.
+CONTRADICTED_DEGRADED_MIN = 2
+CONTRADICTED_DEGRADED_SHARE = 5  # contradicted * 5 >= assessed, i.e. >= 20%
 
 DELIVERY_QUALITY_CLEAN = "clean"
 DELIVERY_QUALITY_USABLE_WITH_WARNING = "usable_with_warning"
@@ -420,17 +424,47 @@ def evaluate_outcome_gate(
     if critique_status in {"unknown", "legacy_unstructured"}:
         warnings.append(f"critique_{critique_status}")
     claim_assessment = quality_record["claim_assessment"]
-    if claim_assessment["version"] == 1:
+    assessment_version = claim_assessment["version"]
+    if assessment_version in (1, 2):
         if any(claim_assessment[key] is None for key in (
             "assessed", "supported", "contradicted", "unassessed"
         )):
             warnings.append("critique_assessment_incomplete")
         contradicted = _coerce_int(claim_assessment["contradicted"])
         unassessed = _coerce_int(claim_assessment["unassessed"])
+        # Deterministic record counts, never the model-declared claim total
+        # (decision 926). One sampled dispute is a finding to review; it stays
+        # listed with its records intact and only a pattern degrades.
+        assessed = _coerce_int(claim_assessment["supported"]) + contradicted
         if contradicted:
-            quality_failures.append(f"critique_contradicted_{contradicted}")
-        if unassessed:
-            warnings.append(f"critique_unassessed_claims_{unassessed}")
+            pattern = (
+                contradicted >= CONTRADICTED_DEGRADED_MIN
+                and contradicted * CONTRADICTED_DEGRADED_SHARE >= assessed
+            )
+            (quality_failures if pattern else warnings).append(
+                f"critique_contradicted_{contradicted}"
+            )
+        if assessment_version == 1:
+            # A version 1 record cannot show whether an unassessed claim hid
+            # a finding, so every one warns.
+            if unassessed:
+                warnings.append(f"critique_unassessed_claims_{unassessed}")
+            if claim_assessment.get("provenance_error") is True:
+                warnings.append("critique_assessment_provenance_error")
+        else:
+            # S102 m02: a sampled claim the critic left unverified is a coverage
+            # fact, not an issue. A finding it reported warns even when its
+            # quote or anchor failed validation, and so does an unreadable
+            # verdict. Warnings only; decision 1001 still reads verified
+            # contradictions alone.
+            for key, reason in (
+                ("unknown_verdicts", "critique_unknown_verdicts"),
+                ("unverified_contradicted", "critique_unverified_contradiction"),
+                ("inconsistent", "critique_internal_inconsistency"),
+            ):
+                count = _coerce_int(claim_assessment.get(key))
+                if count > 0:
+                    warnings.append(f"{reason}_{count}")
         if not _coerce_int(claim_assessment["assessed"]):
             warnings.append("critique_assessment_unassessed")
     elif critique_status == "ok":

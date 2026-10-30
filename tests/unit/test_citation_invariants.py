@@ -89,12 +89,14 @@ def test_finalize_node_imports_citation_annotation_type():
 # ---------------------------------------------------------------------------
 # 2. Canonical extraction has one callsite. S96's advisory pre-finalization
 #    word preview reuses the pure extractor to count the same marker-stripped
-#    text without publishing annotations. Permit only those named helpers;
-#    the runtime guard still confirms canonical extraction once per completion.
+#    text without publishing annotations, and S101 m02's reader-number
+#    renderer reads it to decide where numbers go. Permit only those named
+#    helpers; the runtime guard still confirms canonical extraction once per
+#    completion.
 # ---------------------------------------------------------------------------
 
 
-def test_extraction_calls_are_only_canonical_helper_and_readonly_word_preview():
+def test_extraction_calls_are_only_canonical_helper_and_readonly_consumers():
     tree = _module_ast(FINALIZE_NODE_PATH)
     calls = {
         node.name: _count_calls(node, "extract_citations")
@@ -105,8 +107,9 @@ def test_extraction_calls_are_only_canonical_helper_and_readonly_word_preview():
     assert calls == {
         "_extract_and_resolve_citations": 1,
         "_preview_report_word_budget": 1,
+        "_place_reader_numbers": 1,
     }
-    assert _count_calls(tree, "extract_citations") == 2
+    assert _count_calls(tree, "extract_citations") == 3
 
 
 def test_finalize_node_extract_citations_callsite_is_inside_helper():

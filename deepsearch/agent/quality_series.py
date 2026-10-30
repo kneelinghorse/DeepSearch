@@ -18,6 +18,9 @@ pins the two equal so the constant never drifts.
 from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Sequence
+from urllib.parse import urlparse
+
+from deepsearch.agent.url_utils import arxiv_identity
 
 # Mirrors codeagent_runner.DEFAULT_MAX_STEPS (the locked smolagents step budget).
 # Duplicated as a plain int to keep this module a heavy-import-free leaf; the
@@ -32,14 +35,20 @@ _STEP_BUDGET = 40
 # v4 (S93): coverage separates artifact format from content and records
 # unassessed explicitly. Preserve historical rows; segment calibration by version.
 # v5 (S96): assessment scope and operational events are separate from defects.
-QUALITY_RECORD_SCHEMA_VERSION = 5
+# v6 (S102): a version 2 claim assessment adds unverified_contradicted,
+# inconsistent and unknown_verdicts, read from each claim's critic verdict.
+QUALITY_RECORD_SCHEMA_VERSION = 6
+# The assessment verdicts a critic may report (critique rule 10).
+_MODEL_VERDICTS = frozenset({
+    "supported", "contradicted", "inconsistent", "unassessed", "declared_context",
+})
 
 
 def _as_int(value: Any) -> int:
     """Coerce to int, defaulting to 0 on None / non-numeric (never raises)."""
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 
@@ -222,6 +231,51 @@ def _retrieval_state(st: Mapping[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _has_readable_body(source: Mapping[str, Any]) -> bool:
+    body = source.get("body")
+    chars = len(body) if isinstance(body, str) else _as_int(source.get("body_chars"))
+    return (source.get("content_quality") == "readable_body"
+            and source.get("body_source") == "source_fetch" and chars > 0
+            and source.get("fetched_gone") is not True)
+
+
+def _redirect_aliases(source: Mapping[str, Any]) -> list[str]:
+    aliases = source.get("redirected_from")
+    return [a for a in aliases if isinstance(a, str) and a] if isinstance(aliases, list) else []
+
+
+def _host_and_path(url: str) -> tuple[str, str] | None:
+    try:
+        parsed = urlparse(url)
+        return (parsed.hostname or "").lower(), parsed.path
+    except ValueError:
+        return None
+
+
+def _read_aliases(source: Mapping[str, Any]) -> list[str]:
+    """Redirect aliases that read this source's page (S100 m04).
+
+    An alias exists only when that exact URL's own successful fetch resolved to
+    this source (decision 1013), so the stored body is what the alias serves. A
+    redirect that changed host or landed on the site root stays unread: it may
+    be a login page or a homepage.
+    """
+    final = _host_and_path(str(source.get("url")))
+    if final is None or not final[0] or final[1] in {"", "/"}:
+        return []
+    return [alias for alias in _redirect_aliases(source)
+            if (_host_and_path(alias) or ("", ""))[0] == final[0]]
+
+
+def readable_source_urls(sources: Sequence[Mapping[str, Any]]) -> set[str]:
+    """URLs whose fetched body was read, as ``cited_without_readable_body`` counts.
+
+    The exact source URL, plus its same-site redirect aliases (S100 m04).
+    """
+    return {url for source in sources if _has_readable_body(source)
+            for url in (str(source.get("url")), *_read_aliases(source))}
+
+
 def build_evidence_dependencies(
     cited_urls: Sequence[str], sources: Sequence[Mapping[str, Any]],
     tool_outcomes: Mapping[str, Any],
@@ -231,21 +285,26 @@ def build_evidence_dependencies(
     Inputs use the pipeline's canonical URL boundary. Exact origins remain
     distinct; no www stripping or guessed redirect relationship is permitted.
     ``body_chars`` is the content-free retained-replay equivalent of body length.
+    Collection membership alone (``missing_cited_sources``) matches arXiv URL
+    forms of one paper (S98 m02) and URLs whose own successful fetch redirected
+    to a collected source (S98 m06). Readability and truncation also count a
+    readable source's same-site redirect aliases (S100 m04); fetch sets stay
+    exact.
     """
     cited = set(cited_urls)
-    collected = {str(s.get("url")) for s in sources}
+    collected = {
+        arxiv_identity(url) or url
+        for source in sources
+        for url in [str(source.get("url")), *_redirect_aliases(source)]
+    }
     readable: set[str] = set()
     truncated: set[str] = set()
     for source in sources:
-        url = str(source.get("url"))
-        body = source.get("body")
-        chars = len(body) if isinstance(body, str) else _as_int(source.get("body_chars"))
-        if (source.get("content_quality") == "readable_body"
-                and source.get("body_source") == "source_fetch" and chars > 0
-                and source.get("fetched_gone") is not True):
-            readable.add(url)
+        if _has_readable_body(source):
+            urls = {str(source.get("url")), *_read_aliases(source)}
+            readable |= urls
             if source.get("body_truncated") is True:
-                truncated.add(url)
+                truncated |= urls
     # Generic tool records retain network_requested; the strict Ledger schema
     # intentionally drops it and cannot distinguish controller/cache refusals.
     records = tool_outcomes.get("records")
@@ -260,7 +319,9 @@ def build_evidence_dependencies(
     return {
         "version": 1, "available": True, "cited_urls": len(cited),
         "readable_cited_urls": len(cited & readable),
-        "missing_cited_sources": len(cited - collected),
+        "missing_cited_sources": sum(
+            (arxiv_identity(url) or url) not in collected for url in cited
+        ),
         "cited_without_readable_body": len(unresolved),
         "truncated_cited_bodies": len(cited & truncated),
         "unresolved_cited_fetch_failures": len(unresolved & failed_fetches),
@@ -273,6 +334,81 @@ def build_evidence_dependencies(
             and r.get("network_requested") is False
         ) if isinstance(records, list) else None,
     }
+
+
+def _exact_count(value: Any) -> int | None:
+    """A non-negative integer count, else ``None``; booleans are not counts."""
+
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return int(value)
+
+
+def _verdict_provenance(assessment: Mapping[str, Any]) -> Dict[str, int]:
+    """Version 2 claims whose critic verdict is a finding or cannot be read.
+
+    S102 m02. ``unverified_contradicted`` counts unassessed records the critic
+    called contradicted plus dropped contradicted items; ``inconsistent`` every
+    record or dropped item it called inconsistent, verified or not.
+    ``unknown_verdicts`` counts everything not shown to carry a valid verdict:
+    the unassessed records without one, records whose own verdict cannot be
+    read, and the dropped items without one. A malformed record or drop count
+    is unknown, never safe. Never raises.
+    """
+
+    raw_records = assessment.get("records")
+    records: list[Any] | None = raw_records if isinstance(raw_records, list) else None
+    rows = [r for r in records or [] if isinstance(r, Mapping)
+            and isinstance(r.get("verdict"), str) and r["verdict"] in _MODEL_VERDICTS]
+    malformed = len(records) - len(rows) if records is not None else 0
+    unassessed_rows = [r for r in rows if r["verdict"] == "unassessed"]
+    unverified_contradicted = sum(r.get("model_verdict") == "contradicted" for r in unassessed_rows)
+    # Without readable records, the builder's own count of verified ones remains.
+    inconsistent = (sum("inconsistent" in (r["verdict"], r.get("model_verdict")) for r in rows)
+                    if records is not None else _as_int(assessment.get("inconsistent")))
+    known = sum(isinstance(r.get("model_verdict"), str) and r["model_verdict"] in _MODEL_VERDICTS
+                for r in unassessed_rows)
+    # A malformed record may be one of the unassessed claims the count leaves
+    # unexplained, so the two estimates overlap: take the larger.
+    unknown = max(_as_int(assessment.get("unassessed")) - known, malformed, 0)
+    emitted = _exact_count(assessment.get("emitted"))
+    reported = _exact_count(assessment.get("reported"))
+    dropped = (emitted - reported if emitted is not None and reported is not None
+               else _as_int(assessment.get("dropped")))
+    known_dropped = 0
+    by_verdict = assessment.get("dropped_by_model_verdict")
+    for verdict, raw in (by_verdict.items() if isinstance(by_verdict, Mapping) else ()):
+        count = _exact_count(raw)
+        if count is None or verdict not in _MODEL_VERDICTS:
+            continue
+        known_dropped += count
+        unverified_contradicted += count if verdict == "contradicted" else 0
+        inconsistent += count if verdict == "inconsistent" else 0
+    return {
+        "unverified_contradicted": unverified_contradicted,
+        "inconsistent": inconsistent,
+        "unknown_verdicts": unknown + max(0, dropped - known_dropped),
+    }
+
+
+def _claim_assessment(assessment: Mapping[str, Any]) -> Dict[str, Any]:
+    record: Dict[str, Any] = {
+        "version": assessment.get("version"),
+        "status": assessment.get("status", "unknown"),
+        "assessed": _nullable_int(assessment.get("assessed")),
+        "supported": _nullable_int(assessment.get("supported")),
+        "contradicted": _nullable_int(assessment.get("contradicted")),
+        "unassessed": _nullable_int(assessment.get("unassessed")),
+        "declared_context": _nullable_int(assessment.get("declared_context")),
+        "report_claim_count": None,
+        "coverage_ratio": None,
+        "accuracy_pass": None,
+    }
+    if assessment.get("version") == 2:
+        record.update(_verdict_provenance(assessment))
+    elif assessment.get("provenance_error") is True:
+        record["provenance_error"] = True
+    return record
 
 
 def _citation_surface(st: Mapping[str, Any]) -> Dict[str, Any]:
@@ -338,7 +474,7 @@ def build_quality_record(
     return {
         "verification": {
             "version": 1,
-            "scope": "sampled" if assessment.get("version") == 1
+            "scope": "sampled" if assessment.get("version") in (1, 2)
             and _as_int(assessment.get("assessed")) > 0 else "unassessed_or_unknown",
             "report_wide_accuracy": "unknown",
             "report_claim_count": None,
@@ -348,18 +484,7 @@ def build_quality_record(
         "evidence_dependencies": dict(_mapping(st.get("evidence_dependencies")))
         or {"available": False},
         "citation_surface": _citation_surface(st),
-        "claim_assessment": {
-            "version": assessment.get("version"),
-            "status": assessment.get("status", "unknown"),
-            "assessed": _nullable_int(assessment.get("assessed")),
-            "supported": _nullable_int(assessment.get("supported")),
-            "contradicted": _nullable_int(assessment.get("contradicted")),
-            "unassessed": _nullable_int(assessment.get("unassessed")),
-            "declared_context": _nullable_int(assessment.get("declared_context")),
-            "report_claim_count": None,
-            "coverage_ratio": None,
-            "accuracy_pass": None,
-        },
+        "claim_assessment": _claim_assessment(assessment),
         "coverage": {
             "semantics_version": coverage.get("semantics_version"),
             "assessment_status": coverage.get("assessment_status", "unknown"),
@@ -400,4 +525,5 @@ __all__ = [
     "QUALITY_RECORD_SCHEMA_VERSION",
     "build_quality_record",
     "build_evidence_dependencies",
+    "readable_source_urls",
 ]

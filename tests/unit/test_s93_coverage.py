@@ -71,7 +71,7 @@ def test_unassessed_is_not_full_coverage_or_a_paid_repair_target(spec: object) -
     assert coverage["shortfall_score"] is None
     assert not decide_recovery(_healthy_critique(), coverage).triggered
     record = build_quality_record({"deliverable_coverage": coverage}, 100)
-    assert record["schema_version"] == 5
+    assert record["schema_version"] == 6
     assert record["coverage"]["assessment_status"] == "unassessed"
     assert record["coverage"]["shortfall_score"] is None
 

@@ -52,7 +52,18 @@ def test_supported_sample_can_be_clean_without_claiming_report_accuracy() -> Non
 @pytest.mark.parametrize(("assessment", "reason", "tier"), [
     ({"unassessed": 2}, "critique_unassessed_claims_2", "usable_with_warning"),
     ({"assessed": 0, "supported": 0}, "critique_assessment_unassessed", "usable_with_warning"),
-    ({"contradicted": 1, "supported": 0}, "critique_contradicted_1", "degraded"),
+    # S98 m04 (decision 1001) supersedes the S96 tier: one contradiction in a
+    # sampled check is a finding to review, never clean; two or more that are at
+    # least a fifth of supported + contradicted are a pattern and degrade. The
+    # finding stays listed either way.
+    ({"contradicted": 1, "supported": 0}, "critique_contradicted_1", "usable_with_warning"),
+    ({"contradicted": 2, "supported": 4, "assessed": 6}, "critique_contradicted_2", "degraded"),
+    ({"contradicted": 2, "supported": 10, "assessed": 12}, "critique_contradicted_2",
+     "usable_with_warning"),
+    ({"contradicted": 2, "supported": 8, "assessed": 10}, "critique_contradicted_2", "degraded"),
+    ({"contradicted": 3, "supported": 0, "assessed": 3}, "critique_contradicted_3", "degraded"),
+    # The denominator is the counted records, not a declared total.
+    ({"contradicted": 2, "supported": 4, "assessed": 40}, "critique_contradicted_2", "degraded"),
 ])
 def test_real_assessment_limits_remain_actionable(
     assessment: dict[str, int], reason: str, tier: str,

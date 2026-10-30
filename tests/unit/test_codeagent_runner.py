@@ -2658,6 +2658,31 @@ def test_generation_failure_classification_is_typed_and_content_free(
     assert "DO_NOT_PERSIST" not in reason
 
 
+def test_error_object_with_http_200_is_a_transient_server_failure_not_connection() -> None:
+    """The SDK wraps a 200-with-error rejection as a connection error.
+
+    WHY: the provider answered, so "connection" would misdirect diagnosis;
+    on 2026-10-15 this outage surfaced as reason "other" and blocked retry.
+    """
+    import httpx
+    import openai
+
+    from deepsearch.llm.runtime import ProviderResponseError
+
+    sdk_error = openai.APIConnectionError(request=httpx.Request("POST", "http://p.test"))
+    sdk_error.__cause__ = ProviderResponseError("provider returned an error object")
+    wrapped = _AgentGenerationError("wrapper secret=DO_NOT_PERSIST")
+    wrapped.__cause__ = sdk_error
+
+    classification = runner._generation_failure_classification(wrapped)
+
+    assert classification.reason == "server"
+    assert classification.reason in runner._TRANSIENT_GENERATION_REASONS
+    assert classification.root_class == "ProviderResponseError"
+    assert classification.http_status is None
+    assert runner._is_retryable_generation_failure(wrapped, _NS(memory=_NS(steps=[])))
+
+
 def test_bad_request_context_overflow_keeps_specific_reason_without_raw_text() -> None:
     """A generic HTTP 400 must not erase a specific context-length cause."""
 

@@ -71,6 +71,12 @@ class CitationAnnotation(BaseModel):
 
     # Internal ownership survives model_copy/rebase without extending protocol JSON.
     _extraction_mode: Literal["primary", "numbered"] | None = PrivateAttr(default=None)
+    # S101 m02: the reader number finalize rendered before this citation's own
+    # inline marker, kept the same way for the persisted fate count.
+    _reader_number_rendered: int | None = PrivateAttr(default=None)
+    # S101 m03: the URL exactly as the agent cited it, before canonicalization,
+    # so a source naming that literal string is recognized.
+    _cited_url: str | None = PrivateAttr(default=None)
 
     type: Literal["url_citation"] = Field(
         default="url_citation",

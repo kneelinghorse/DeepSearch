@@ -52,7 +52,8 @@ x[7]
 ~~~
     x[8]
 """
-    assert reader_markers(text) == [1, 1]
+    # A superscript-style reading counts ¹; S103 m02's style rule is tested on its own.
+    assert reader_markers(text, superscripts=True) == [1, 1]
 
 
 def test_unused_unknown_shapes_and_bad_coordinates_remain_distinct() -> None:

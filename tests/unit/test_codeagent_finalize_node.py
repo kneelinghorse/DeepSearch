@@ -1356,13 +1356,14 @@ def test_critique_url_quarantine_retains_prior_liveness_attempt(
 
 
 def test_extract_citations_called_exactly_once_per_completion(report_dir):
-    """The success path must invoke `extract_citations` exactly once.
+    """The success path must run canonical extraction exactly once.
 
     Runtime call-count guard mirrors the S66 single-critique invariant. If a
     future change accidentally calls the extractor in a loop or adds a second
     callsite, this assertion fails. S68: extraction now precedes critique,
     so the markers live on the synthesis output rather than the critique
-    output.
+    output. S101 m02: the reader-number renderer reads the pure extractor
+    once before it, without publishing annotations.
     """
 
     state = _state()
@@ -1385,14 +1386,18 @@ def test_extract_citations_called_exactly_once_per_completion(report_dir):
             fnode,
             "extract_citations",
             wraps=fnode.extract_citations,
-        ) as ext_mock:
+        ) as ext_mock, patch.object(
+            fnode,
+            "_extract_and_resolve_citations",
+            wraps=fnode._extract_and_resolve_citations,
+        ) as canonical_mock:
             r = await fnode.codeagent_finalize_node(state)
-            return r, ext_mock.call_count
+            return r, ext_mock.call_count, canonical_mock.call_count
 
-    result, ext_calls = asyncio.run(run())
+    result, ext_calls, canonical_calls = asyncio.run(run())
 
     assert result["mission_outcome"] == MissionOutcome.COMPLETE.value
-    assert ext_calls == 1
+    assert (ext_calls, canonical_calls) == (2, 1)
 
 
 def test_citation_telemetry_always_present_on_success_path(report_dir):

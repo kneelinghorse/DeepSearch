@@ -50,15 +50,19 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import time
+from collections import Counter
 from dataclasses import dataclass, field, replace
+from fractions import Fraction
 from typing import Any, Mapping, Optional, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
 from deepsearch.error_safety import safe_error_from_parts, safe_exception_text
 from deepsearch.mission.scope import ScopeAdmission, compile_authored_scope
 from deepsearch.report.citation import CitationAnnotation
+from deepsearch.report.scope_validation import _WHITESPACE
 
 from .citation_liveness import (
     CLASSIFICATION_DEAD,
@@ -66,11 +70,12 @@ from .citation_liveness import (
     _normalise_url_for_cache,
     build_source_url_set,
     classify_citation,
+    source_named_dead_urls,
 )
 from .codeagent_runner import (
     build_default_model,
 )
-from .critique_evidence import select_critique_passages
+from .critique_evidence import cited_passage_ranges, render_passages, select_critique_passages
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +120,28 @@ CRITIQUE_ANNOTATION_URL_MAX_CHARS = 2_048
 MIN_ANCHOR_CHARS = 8
 
 _VALID_VERDICTS = ("unsupported", "hallucinated")
+# S102 m02: the assessment verdicts rule 10 lets the critic report.
+_ASSESSMENT_VERDICTS = (
+    "supported", "contradicted", "inconsistent", "unassessed", "declared_context",
+)
+# S102 m03: one class per cited evidence id, counted in quote_checks.
+_QUOTE_CHECK_CLASSES = (
+    "exact", "normalized", "unknown_id", "missing_quote", "quote_length", "not_found",
+    "over_limit", "matcher_error",
+)
+# The only folds a source-passage quote may differ by. No NFKC and no case
+# folding: superscripts, fractions and circled characters stay distinct, and
+# the minus sign (U+2212) stays apart so a range never matches a subtraction.
+_QUOTE_FOLDS = {
+    **dict.fromkeys("\u2018\u2019\u201a\u201b\u2032\u0060\u00b4", "'"),
+    **dict.fromkeys("\u201c\u201d\u201e\u201f\u2033", '"'),
+    **dict.fromkeys("\u2010\u2011\u2012\u2013\u2014\u2015", "-"),
+    "\u2026": "...",
+}
+# A space beside sentence punctuation is kept, so "4. 87" never matches "4.87".
+_SPACE_KEEPING_PUNCTUATION = frozenset(".,:;!?")
+_MIN_QUOTE_CHARS = 8
+_FAILED_QUOTE_MAX_CHARS = 200
 
 # Heading detection covers every CommonMark heading form so the applier/guard
 # can never anchor-delete a section title:
@@ -167,11 +194,14 @@ Hard rules:
    evidence. Do not call those facts unsupported because public pages cannot verify them.
    Record them as declared_context with a verbatim quote from C1 when relevant.
 10. Assess claims using the labeled evidence passages. Report supported, contradicted,
-    unassessed, or declared_context separately from destructive annotations. Each supported
-    or contradicted judgment must cite visible evidence_ids and exact evidence_quotes.
-    Selected passages cannot prove absence in a whole source or corpus. Contradictions are
-    advisory findings; do not relabel them unsupported to force deletion. Never infer an
-    accuracy pass from zero findings, zero evaluated claims, or missing evidence.
+    inconsistent, unassessed, or declared_context separately from destructive annotations.
+    Each supported or contradicted judgment must cite visible evidence_ids and exact
+    evidence_quotes. Use inconsistent when the draft states the claim differently elsewhere,
+    and give that other statement as conflict_anchor: a unique exact draft substring that
+    does not overlap the anchor. Selected passages cannot prove absence in a whole source or
+    corpus. Contradictions and inconsistencies are advisory findings; do not relabel them
+    unsupported to force deletion. Never infer an accuracy pass from zero findings, zero
+    evaluated claims, or missing evidence.
 
 Output format (mandatory). Emit ONLY the delimiter line followed by a single JSON object — no
 report body, no prose before or after the JSON:
@@ -181,8 +211,10 @@ report body, no prose before or after the JSON:
 "<verbatim substring copied from the draft>", "verdict": "unsupported" or "hallucinated",
 "note": "<short reason>", "citation_urls": ["<relevant URL from the citation context>"]}],
 "assessments": [{"anchor": "<unique exact draft claim>", "verdict": "supported" or
-"contradicted" or "unassessed" or "declared_context", "evidence_ids": ["E1.1"],
-"evidence_quotes": {"E1.1": "<exact 8..600 character passage quote>"}, "note": "<reason>"}]}
+"contradicted" or "inconsistent" or "unassessed" or "declared_context", "evidence_ids":
+["E1.1"], "evidence_quotes": {"E1.1": "<exact 8..600 character passage quote>"},
+"conflict_anchor": "<inconsistent only: the other exact draft statement>",
+"note": "<reason>"}]}
 
 The ===CRITIQUE_METADATA=== delimiter is literal; emit it exactly. If there are no unsupported
 claims, emit an empty annotations list. The JSON must parse — a missing delimiter or
@@ -248,6 +280,9 @@ class CritiqueResult:
     provider_attempts: list[dict[str, Any]] = field(default_factory=list)
     assessment: dict[str, Any] = field(default_factory=dict)
     evidence_manifest: list[dict[str, Any]] = field(default_factory=list)
+    # S101 m02: each applied gap note's (start, end) in the critique input, so
+    # finalize can tell a citation lost to a critique edit from other losses.
+    applied_edit_spans: list[tuple[int, int]] = field(default_factory=list)
 
     def annotation_summary(self) -> dict[str, Any]:
         """Return exact counts derived from the bounded annotation ledger."""
@@ -332,6 +367,7 @@ def _prepare_sources_with_telemetry(
     total_budget: int = GROUNDING_TOTAL_BUDGET_CHARS,
     grounding_visibility: _GroundingVisibility | None = None,
     draft_markdown: str | None = None,
+    row_records: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Prepare cited-first grounding rows under one exact rendered-char budget.
 
@@ -341,7 +377,8 @@ def _prepare_sources_with_telemetry(
     overhead. Live cited sources are ordered first, each source contributes at
     most ``per_source_cap`` content chars, and overflow rows are dropped.
     Entries without a URL are dropped. The output key remains ``snippet`` so
-    :func:`_format_source_block` renders unchanged.
+    :func:`_format_source_block` renders unchanged. ``row_records`` receives
+    what S103 m03's extension reads of each prepared row.
     """
 
     telemetry = {
@@ -474,6 +511,8 @@ def _prepare_sources_with_telemetry(
         text = text[:per_source_cap]
         passages: list[dict[str, Any]] = []
         complete_body_visible = original_text_chars <= per_source_cap
+        claims = ""
+        available = per_source_cap
         if draft_markdown is not None:
             claims = "\n".join(
                 draft_markdown[max(0, c.start_index):min(len(draft_markdown), c.end_index)]
@@ -511,6 +550,12 @@ def _prepare_sources_with_telemetry(
             # draft citation even when its body happened to fit.
             incomplete_keys.add(source_key)
         out.append(row)
+        if row_records is not None:
+            row_records.append({
+                "source_key": source_key, "url": raw_url, "text": original_text,
+                "claims": claims, "budget": available, "complete": complete_body_visible,
+                "passages": passages,
+            })
         if grounding_visibility is not None:
             grounding_visibility.passages.extend(passages)
             grounding_visibility.passage_text.update({
@@ -574,6 +619,155 @@ def _prepare_sources(
     return prepared
 
 
+# S103 m03: a cut cited source may show one chunk per citing claim, at most 16.
+CITED_EXTRA_MIN_CHUNKS = 4
+CITED_EXTRA_MAX_CHUNKS = 16
+
+
+class _CitedExtraInvariantError(Exception):
+    """The extended rows broke a rule the baseline keeps; the baseline stands."""
+
+
+def _extend_cited_passages(
+    prepared: list[dict[str, Any]],
+    telemetry: dict[str, Any],
+    row_records: Sequence[Mapping[str, Any]],
+    *,
+    citations: Sequence[CitationAnnotation] | None,
+    grounding_visibility: _GroundingVisibility | None,
+    per_source_cap: int = SOURCE_GROUNDING_MAX_CHARS,
+) -> list[dict[str, Any]]:
+    """Give cited sources the budget today's packer left unused (S103 m03).
+
+    Runs only on an unsqueezed baseline: no row dropped and every selector budget
+    the per-source cap. A cited source the baseline cut shows up to
+    ``min(16, max(4, n))`` chunks for its ``n`` citations: its baseline chunks in
+    whole 600-character strides, then the selector's other chunks in rank order.
+    The remainder pays for widening first and otherwise scales every source's
+    extra chunks by one factor. Every other row, and every visibility and
+    completeness field, stays the baseline's. Rows, manifest and passage text are
+    committed together only once every invariant holds; any failure keeps the
+    baseline whole and is recorded, never raised.
+    """
+
+    baseline_block = int(telemetry["source_block_chars"])
+    total_budget = int(telemetry["source_budget_chars"])
+    cited_counts = Counter(
+        key for key in (_source_url_key(getattr(c, "url", "")) for c in citations or []) if key
+    )
+    eligible = [index for index, record in enumerate(row_records)
+                if cited_counts[record["source_key"]] and not record["complete"]]
+    telemetry.update({
+        "cited_extra_unsqueezed": bool(
+            telemetry["sources_dropped"] == 0
+            and all(record["budget"] == per_source_cap for record in row_records)
+        ),
+        "cited_extra_remainder": total_budget - baseline_block,
+        "cited_extra_eligible": len(eligible),
+        "cited_extra_baseline_passages": sum(
+            len(row_records[index]["passages"]) for index in eligible),
+        "cited_extra_chars": 0,
+        "cited_extra_chunks": 0,
+        "cited_extra_sources": 0,
+        "cited_extra_skipped": None,
+        "cited_extra_fallback": False,
+    })
+    if not telemetry["cited_extra_unsqueezed"] or not eligible:
+        return prepared
+    try:
+        plans = {}
+        for index in eligible:
+            record = row_records[index]
+            shown = [(p["start"], p["end"]) for p in record["passages"]]
+            limit = min(CITED_EXTRA_MAX_CHUNKS,
+                        max(CITED_EXTRA_MIN_CHUNKS, cited_counts[record["source_key"]]))
+            widened, extra = cited_passage_ranges(
+                record["text"], record["claims"], shown, limit=limit)
+            plans[index] = (shown, widened, extra)
+
+        def rendering(index: int, extra_chunks: int) -> tuple[str, list[dict[str, Any]]]:
+            shown, widened, extra = plans[index]
+            return render_passages(
+                row_records[index]["text"], [*widened, *extra[:extra_chunks]], shown,
+                source_index=index + 1, url=row_records[index]["url"],
+            )
+
+        def demand(counts: Mapping[int, int]) -> int:
+            return sum(len(rendering(index, counts[index])[0]) - len(prepared[index]["snippet"])
+                       for index in eligible)
+
+        remainder = telemetry["cited_extra_remainder"]
+        if demand(dict.fromkeys(eligible, 0)) > remainder:
+            telemetry["cited_extra_skipped"] = "remainder_below_widening"
+            return prepared
+        full = {index: len(plans[index][2]) for index in eligible}
+        counts = full
+        if demand(full) > remainder:
+            # One factor for every source's extra chunks, in whole chunks: the
+            # largest that fits, among the values where some count changes.
+            # Factor 0 is widening alone, which fits.
+            factors = sorted({Fraction(step, chunks) for chunks in full.values() if chunks
+                              for step in range(chunks + 1)}, reverse=True)
+            for factor in factors:
+                counts = {index: math.floor(factor * full[index]) for index in eligible}
+                if demand(counts) <= remainder:
+                    break
+        rows = list(prepared)
+        passages: dict[int, list[dict[str, Any]]] = {}
+        texts: dict[str, str] = {}
+        for index in eligible:
+            text, manifest = rendering(index, counts[index])
+            rows[index] = {**prepared[index], "snippet": text}
+            passages[index] = manifest
+            body = row_records[index]["text"]
+            texts.update({p["evidence_id"]: body[p["start"]:p["end"]] for p in manifest})
+            shown = plans[index][0]
+            for start, end in shown:
+                if not any(p["start"] <= start and end <= p["end"] for p in manifest):
+                    raise _CitedExtraInvariantError(f"baseline range {start}:{end} not shown")
+            if sum(len(p["baseline_ranges"]) for p in manifest) != len(shown):
+                raise _CitedExtraInvariantError("baseline ranges miscounted")
+        block = sum(len(_format_source_row(position + 1, row))
+                    for position, row in enumerate(rows)) + 2 * (len(rows) - 1)
+        if block > total_budget or block != baseline_block + demand(counts):
+            raise _CitedExtraInvariantError(f"source block {block} exceeds or mismatches")
+        if [row["url"] for row in rows] != [row["url"] for row in prepared] or any(
+            rows[index] is not prepared[index]
+            for index in range(len(rows)) if index not in passages
+        ):
+            raise _CitedExtraInvariantError("a row outside the extension changed")
+    except Exception as exc:  # noqa: BLE001 — the baseline is a complete, valid context
+        logger.warning(
+            "critique cited-passage extension kept the baseline: %s",
+            safe_exception_text(exc, category="internal"),
+        )
+        telemetry["cited_extra_fallback"] = True
+        return prepared
+
+    if grounding_visibility is not None:
+        replaced = {p["evidence_id"] for index in passages
+                    for p in row_records[index]["passages"]}
+        by_row: list[dict[str, Any]] = []
+        for index, record in enumerate(row_records):
+            by_row.extend(passages.get(index, record["passages"]))
+        others = [p for p in grounding_visibility.passages
+                  if p.get("kind") != "source_passage"]
+        grounding_visibility.passages[:] = [*by_row, *others]
+        for evidence_id in replaced:
+            grounding_visibility.passage_text.pop(evidence_id, None)
+        grounding_visibility.passage_text.update(texts)
+    content_chars = sum(len(str(row["snippet"])) for row in rows)
+    telemetry.update({
+        "source_block_chars": block,
+        "source_content_chars": content_chars,
+        "estimated_source_tokens": (block + 3) // 4,
+        "cited_extra_chars": block - baseline_block,
+        "cited_extra_chunks": sum(counts.values()),
+        "cited_extra_sources": len(passages),
+    })
+    return rows
+
+
 def _format_source_block(sources: Sequence[Mapping[str, Any]]) -> str:
     """Render the source list as a numbered text block for the user prompt."""
 
@@ -588,6 +782,7 @@ def _format_source_block(sources: Sequence[Mapping[str, Any]]) -> str:
 def _classify_citation_for_prompt(
     annotation: CitationAnnotation,
     sources_url_set: set[str],
+    source_named_urls: set[str],
 ) -> str:
     """Return the citation classification used in the liveness-context block.
 
@@ -597,11 +792,15 @@ def _classify_citation_for_prompt(
     ``sources_url_set`` MUST be built via ``build_source_url_set`` (normalised),
     which :func:`_build_critique_messages` now does. The classifier is 5-state:
     live / dead / orphan (reachable but uncollected) / hallucinated (unreachable
-    AND uncollected) / unknown.
+    AND uncollected) / unknown. S101 m03: an unreachable, uncollected URL that
+    a collected body names verbatim is dead-uncollected, not hallucinated.
     """
 
     return classify_citation(
-        live=annotation.live, url=annotation.url, source_url_set=sources_url_set
+        live=annotation.live,
+        url=annotation.url,
+        source_url_set=sources_url_set,
+        source_named_urls=source_named_urls,
     )
 
 
@@ -613,6 +812,10 @@ _CLASSIFICATION_DESCRIPTIONS: dict[str, str] = {
     ),
     "orphan": "orphan (not in sources but reachable — uncollected/normalisation mismatch)",
     "hallucinated": "hallucinated (not in sources AND GET-confirmed unreachable — fabricated)",
+    "dead_uncollected": (
+        "dead (not in sources_collected, but a collected source names this exact URL; "
+        "GET-confirmed gone — not fabricated)"
+    ),
     "unknown": (
         "unknown (probe inconclusive — bot-wall/rate-limit/timeout or budget "
         "exhausted; not dead evidence)"
@@ -623,6 +826,7 @@ _CLASSIFICATION_DESCRIPTIONS: dict[str, str] = {
 def _format_citation_liveness_block(
     citations: Sequence[CitationAnnotation],
     sources_url_set: set[str],
+    source_named_urls: set[str],
 ) -> str:
     """Render the per-citation liveness context block for the critique prompt.
 
@@ -637,7 +841,7 @@ def _format_citation_liveness_block(
 
     bullets: list[str] = []
     for ann in citations:
-        classification = _classify_citation_for_prompt(ann, sources_url_set)
+        classification = _classify_citation_for_prompt(ann, sources_url_set, source_named_urls)
         descriptor = _CLASSIFICATION_DESCRIPTIONS[classification]
         bullets.append(f"- [cite:{ann.url}]  →  {descriptor}")
 
@@ -675,11 +879,17 @@ def _build_critique_messages(
     objective = (
         str(mission_context.get("objective") or "").strip() or "(no objective)"
     )[:4_000]
+    row_records: list[dict[str, Any]] = []
     prepared, source_telemetry = _prepare_sources_with_telemetry(
         sources_collected,
         citations=citations,
         grounding_visibility=grounding_visibility,
         draft_markdown=draft_markdown,
+        row_records=row_records,
+    )
+    prepared = _extend_cited_passages(
+        prepared, source_telemetry, row_records,
+        citations=citations, grounding_visibility=grounding_visibility,
     )
     scope_dropped = max(
         source_count_before_scope - len(sources_collected),
@@ -755,7 +965,9 @@ def _build_critique_messages(
         # builder (not raw URLs) so critique's orphan/dead classification
         # reconciles with the liveness gate's.
         sources_url_set = build_source_url_set(sources_collected)
-        liveness_block = _format_citation_liveness_block(citations, sources_url_set)
+        liveness_block = _format_citation_liveness_block(
+            citations, sources_url_set, source_named_dead_urls(citations, sources_collected),
+        )
         if liveness_block:
             liveness_available_chars = len(liveness_block)
             liveness_block = liveness_block[:CRITIQUE_LIVENESS_MAX_CHARS]
@@ -1045,6 +1257,260 @@ def _parse_annotations(
 def _assessment_record(
     raw: str, draft: str, visibility: _GroundingVisibility, declared_count: int,
 ) -> dict[str, Any]:
+    """The version 2 assessment, or today's version 1 record if building it raises.
+
+    S102 m02: new assessment code can never become a critique error, which
+    would fail the run. The fallback is the unchanged version 1 builder,
+    flagged ``provenance_error``; it cannot see dropped verdicts or
+    ``inconsistent``, so the gate warns rather than reading it as safe.
+    """
+    try:
+        record, declared_anchors = _assessment_record_v2(raw, draft, visibility, declared_count)
+    except Exception as exc:  # noqa: BLE001 — containment is the contract
+        logger.warning(
+            "critique assessment v2 failed; recording version 1: %s",
+            safe_exception_text(exc, category="internal"),
+        )
+        record = _assessment_record_v1(raw, draft, visibility, declared_count)
+        record["provenance_error"] = True
+        return record
+    # Committed only on success, so the fallback sees exactly today's state.
+    visibility.declared_context_anchors.update(declared_anchors)
+    return record
+
+
+def _model_verdict(item: Any) -> str:
+    """The critic's own verdict for one assessment item, or ``invalid``."""
+    verdict = item.get("verdict") if isinstance(item, Mapping) else None
+    return verdict if isinstance(verdict, str) and verdict in _ASSESSMENT_VERDICTS else "invalid"
+
+
+def _conflict_anchor_reason(
+    draft: str, conflict_anchor: Any, anchor_loc: tuple[int, int],
+    visibility: _GroundingVisibility,
+) -> str | None:
+    """Why an ``inconsistent`` verdict's other statement fails location, else ``None``."""
+    if not isinstance(conflict_anchor, str):
+        return "not_found"
+    loc, reason = _locate_anchor_with_reason(
+        draft, conflict_anchor[:CRITIQUE_ANNOTATION_ANCHOR_MAX_CHARS])
+    if loc is None:
+        return reason.removeprefix("anchor_")
+    if _range_touches_heading(draft, *loc):
+        return "structure_overlap"
+    if visibility.draft_chars_visible is not None and loc[1] > visibility.draft_chars_visible:
+        return "not_visible"
+    if len(conflict_anchor) > CRITIQUE_ANNOTATION_ANCHOR_MAX_CHARS:
+        return "too_long"
+    if loc[0] < anchor_loc[1] and anchor_loc[0] < loc[1]:
+        return "overlaps_anchor"
+    return None
+
+
+def _normalized_quote_text(text: str) -> tuple[str, list[int]]:
+    """Fold quotes, dashes and ellipses and normalize spacing, keeping origins.
+
+    Each run of whitespace (the ``count_report_words`` set) becomes one space,
+    and a space beside a character that is neither alphanumeric nor sentence
+    punctuation is removed, so ``κ = 0.87`` and ``κ=0.87`` agree while
+    ``the rapist`` and ``therapist`` do not. Each output character records the
+    index of the input character it came from.
+    """
+    folded: list[str] = []
+    origins: list[int] = []
+    for index, char in enumerate(text):
+        if _WHITESPACE.match(char):
+            if not folded or folded[-1] != " ":
+                folded.append(" ")
+                origins.append(index)
+            continue
+        for part in _QUOTE_FOLDS.get(char, char):
+            folded.append(part)
+            origins.append(index)
+
+    def keeps_space(char: str) -> bool:
+        return char.isalnum() or char in _SPACE_KEEPING_PUNCTUATION
+
+    kept = [
+        i for i, char in enumerate(folded)
+        if char != " " or (
+            (i == 0 or keeps_space(folded[i - 1]))
+            and (i + 1 == len(folded) or keeps_space(folded[i + 1]))
+        )
+    ]
+    return "".join(folded[i] for i in kept), [origins[i] for i in kept]
+
+
+def _normalized_quote_span(quote: str, passage: str) -> tuple[int, int] | None:
+    """The passage span a quote matches after normalization, in whole characters."""
+    normalized_quote, _ = _normalized_quote_text(quote)
+    if len(normalized_quote) < _MIN_QUOTE_CHARS:
+        return None
+    normalized_passage, origins = _normalized_quote_text(passage)
+    at = normalized_passage.find(normalized_quote)
+    if at < 0:
+        return None
+    return origins[at], origins[at + len(normalized_quote) - 1] + 1
+
+
+def _checked_evidence(
+    index: int, evidence_id: Any, quotes: Mapping[str, Any],
+    manifest: Mapping[str, Mapping[str, Any]], visibility: _GroundingVisibility,
+) -> tuple[str, dict[str, Any] | None]:
+    """Classify one cited evidence id and return its verified entry, if any.
+
+    S102 m03: after an exact match fails, a source-passage quote may match
+    under the explicit folds. The stored quote is always the passage's own
+    text between the stored offsets, never the critic's wording, so it may
+    exceed 600 characters. The declared author context (C1) stays exact.
+    """
+    if index >= 3:
+        return "over_limit", None
+    if not isinstance(evidence_id, str) or evidence_id not in manifest:
+        return "unknown_id", None
+    quote = quotes.get(evidence_id)
+    if not isinstance(quote, str):
+        return "missing_quote", None
+    if not 8 <= len(quote) <= 600:
+        return "quote_length", None
+    passage = visibility.author_context if evidence_id == "C1" else (
+        visibility.passage_text.get(evidence_id, "")
+    )
+    match = "exact"
+    if quote in passage:
+        start = passage.index(quote)
+        span = (start, start + len(quote))
+    elif evidence_id == "C1":
+        return "not_found", None
+    else:
+        try:
+            found = _normalized_quote_span(quote, passage)
+        except Exception:  # noqa: BLE001 — a matcher fault keeps the exact result
+            return "matcher_error", None
+        if found is None:
+            return "not_found", None
+        span, match = found, "normalized"
+    entry = dict(manifest[evidence_id])
+    entry["quote"] = passage[span[0]:span[1]]
+    if entry["kind"] == "source_passage":
+        entry["quote_start"] = entry["start"] + span[0]
+        entry["quote_end"] = entry["start"] + span[1]
+    entry["quote_match"] = match
+    return match, entry
+
+
+def _assessment_record_v2(
+    raw: str, draft: str, visibility: _GroundingVisibility, declared_count: int,
+) -> tuple[dict[str, Any], set[str]]:
+    """Version 2: each record keeps the critic's verdict beside the validated one.
+
+    ``model_verdict`` is the critic's verdict when valid, else ``invalid``, so
+    a demotion never hides a finding. ``verdict`` keeps version 1's meaning
+    plus ``inconsistent``: the draft states the claim differently elsewhere,
+    checked by location only, never by evidence. Items dropped before they
+    become records are counted by their model verdict. Every cited evidence id
+    gets one class in ``quote_checks``, and a record demoted for its evidence
+    says why in ``quote_failure`` (S102 m03). Returns the record and the
+    verified declared-context anchors, which the caller commits.
+    """
+    payload = _critique_payload(raw) or {}
+    reported = payload.get("assessments")
+    reported = reported if isinstance(reported, list) else []
+    manifest = {p["evidence_id"]: p for p in visibility.passages}
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    declared_anchors: set[str] = set()
+    dropped_by_model_verdict: dict[str, int] = {}
+    quote_checks = dict.fromkeys(_QUOTE_CHECK_CLASSES, 0)
+    for position, item in enumerate(reported):
+        model_verdict = _model_verdict(item)
+        anchor = item.get("anchor") if isinstance(item, Mapping) else None
+        if (position >= CRITIQUE_ANNOTATION_MAX_COUNT or not isinstance(anchor, str)
+                or not anchor or anchor in seen):
+            dropped_by_model_verdict[model_verdict] = (
+                dropped_by_model_verdict.get(model_verdict, 0) + 1)
+            continue
+        seen.add(anchor)
+        anchor = anchor[:CRITIQUE_ANNOTATION_ANCHOR_MAX_CHARS]
+        loc, reason = _locate_anchor_with_reason(draft, anchor)
+        verdict = model_verdict
+        if verdict == "invalid":
+            verdict, reason = "unassessed", "invalid_verdict"
+        ids = item.get("evidence_ids")
+        ids = ids if isinstance(ids, list) else []
+        quotes = item.get("evidence_quotes")
+        quotes = quotes if isinstance(quotes, Mapping) else {}
+        evidence: list[dict[str, Any]] = []
+        failure: tuple[str, Any] | None = None
+        for index, evidence_id in enumerate(ids):
+            check, entry = _checked_evidence(index, evidence_id, quotes, manifest, visibility)
+            quote_checks[check] += 1
+            if entry is not None:
+                evidence.append(entry)
+            elif failure is None:
+                failure = check, quotes.get(evidence_id) if isinstance(evidence_id, str) else None
+        required_kind = "declared_context" if verdict == "declared_context" else "source_passage"
+        traceable = any(e["kind"] == required_kind for e in evidence)
+        if loc is None or _range_touches_heading(draft, *loc):
+            verdict = "unassessed"
+            if reason == "located":
+                reason = "structure_overlap"
+        elif visibility.draft_chars_visible is not None and loc[1] > visibility.draft_chars_visible:
+            verdict, reason = "unassessed", "anchor_not_visible"
+        elif len(item["anchor"]) > CRITIQUE_ANNOTATION_ANCHOR_MAX_CHARS:
+            verdict, reason = "unassessed", "anchor_too_long"
+        elif verdict == "inconsistent":
+            conflict = _conflict_anchor_reason(
+                draft, item.get("conflict_anchor"), loc, visibility)
+            if conflict is None:
+                reason = "traceable_internal_conflict"
+            else:
+                verdict, reason = "unassessed", f"conflict_anchor_{conflict}"
+        elif verdict != "unassessed" and (not traceable or len(evidence) != len(ids)):
+            verdict, reason = "unassessed", "no_visible_quoted_evidence"
+        elif verdict != "unassessed":
+            reason = "traceable_model_judgment"
+        if verdict == "declared_context":
+            declared_anchors.add(anchor)
+        row: dict[str, Any] = {
+            "anchor": anchor, "verdict": verdict, "model_verdict": model_verdict,
+            "reason": reason or "model_unassessed", "evidence": evidence,
+            "note": str(item.get("note") or "")[:1000],
+        }
+        if model_verdict == "inconsistent":
+            conflict_anchor = item.get("conflict_anchor")
+            row["conflict_anchor"] = (
+                conflict_anchor[:CRITIQUE_ANNOTATION_ANCHOR_MAX_CHARS]
+                if isinstance(conflict_anchor, str) else None
+            )
+        if reason == "no_visible_quoted_evidence":
+            # The first failing id's class, or why no id failed (S102 m03).
+            row["quote_failure"] = (
+                "no_evidence_ids" if not ids
+                else "required_kind_missing" if failure is None else failure[0]
+            )
+            if failure is not None and failure[0] == "not_found":
+                row["failed_quote"] = failure[1][:_FAILED_QUOTE_MAX_CHARS]
+        rows.append(row)
+    counts = {v: sum(row["verdict"] == v for row in rows)
+              for v in ("supported", "contradicted", "inconsistent", "unassessed",
+                        "declared_context")}
+    assessed = counts["supported"] + counts["contradicted"]
+    return {
+        "version": 2, "status": "partial" if assessed else "unassessed",
+        "scope": "model_selected_anchors", "assessed": assessed, **counts,
+        "reported": len(rows), "emitted": len(reported),
+        "dropped": sum(dropped_by_model_verdict.values()),
+        "dropped_by_model_verdict": dropped_by_model_verdict, "quote_checks": quote_checks,
+        "records": rows, "declared_claim_count": declared_count,
+        "report_claim_count": None, "unreported_claims": "unknown", "coverage_ratio": None,
+        "grounding_context_complete": visibility.corpus_complete, "accuracy_pass": None,
+    }, declared_anchors
+
+
+def _assessment_record_v1(
+    raw: str, draft: str, visibility: _GroundingVisibility, declared_count: int,
+) -> dict[str, Any]:
     """Validate quoted evidence provenance while leaving semantic judging explicit."""
     payload = _critique_payload(raw) or {}
     reported = payload.get("assessments")
@@ -1273,6 +1739,8 @@ def _dead_empty_body_citation_urls(
     }
     if not empty_content_urls:
         return set()
+    # S101 m03: a dead-uncollected URL is never collected, so never returned.
+    source_named = source_named_dead_urls(citations, sources_collected)
     dead_empty: set[str] = set()
     for citation in citations:
         url = getattr(citation, "url", "") or ""
@@ -1283,12 +1751,39 @@ def _dead_empty_body_citation_urls(
                 live=getattr(citation, "live", None),
                 url=url,
                 source_url_set=source_url_set,
+                source_named_urls=source_named,
             )
             == CLASSIFICATION_DEAD
             and _normalise_url_for_cache(url) in empty_content_urls
         ):
             dead_empty.add(url)
     return dead_empty
+
+
+def _hallucinated_citation_urls(
+    citations: Sequence[CitationAnnotation] | None,
+    sources_collected: Sequence[Mapping[str, Any]] | None,
+) -> set[str]:
+    """Citation URLs pre-classified hallucinated, exempt from the grounding safeguard.
+
+    S101 m03: a dead, uncollected URL that a collected body names verbatim is
+    dead, not hallucinated, so the incomplete-grounding safeguard protects its
+    claims like any other citation's.
+    """
+
+    source_url_set = build_source_url_set(sources_collected)
+    source_named = source_named_dead_urls(citations or [], sources_collected)
+    return {
+        citation.url
+        for citation in citations or []
+        if classify_citation(
+            live=getattr(citation, "live", None),
+            url=getattr(citation, "url", "") or "",
+            source_url_set=source_url_set,
+            source_named_urls=source_named,
+        )
+        == CLASSIFICATION_HALLUCINATED
+    }
 
 
 def _apply_span_annotations(
@@ -1681,17 +2176,9 @@ def run_critique(
         dead_empty_body_urls = _dead_empty_body_citation_urls(
             citations, sources_collected
         )
-        source_url_set = build_source_url_set(sources_collected)
-        hallucinated_citation_urls = {
-            citation.url
-            for citation in citations or []
-            if classify_citation(
-                live=getattr(citation, "live", None),
-                url=getattr(citation, "url", "") or "",
-                source_url_set=source_url_set,
-            )
-            == CLASSIFICATION_HALLUCINATED
-        }
+        hallucinated_citation_urls = _hallucinated_citation_urls(
+            citations, sources_collected
+        )
         candidate, edits, annotation_outcomes = _apply_span_annotations(
             draft_markdown,
             annotations,
@@ -1759,6 +2246,7 @@ def run_critique(
         evidence_manifest=list(grounding_visibility.passages),
         annotations=annotation_outcomes,
         annotations_dropped=annotations_dropped,
+        applied_edit_spans=[(start, end) for start, end, _ in edits],
     )
 
 

@@ -10,7 +10,10 @@ stripped output (decision #519).
 S96 reconciles primary markers and numbered references on the same stripped
 text. Reader markers remain unchanged. Duplicate claim-position/URL pairs
 prefer primary coordinates; each annotation privately retains marker ownership.
-Conflicting reference numbers are unresolved rather than guessed.
+Conflicting reference numbers are unresolved rather than guessed. S100 reads
+an entry whose links all name one source (an arXiv abstract and its HTML page)
+as one entry. S103 reads a superscript as a reader marker only in a report that
+cites that way (:func:`reads_superscripts`).
 
 No I/O, no LLM calls — the extractor is deliberately pure-function so that
 re-retrieval triggered by extraction (roadmap §3.7 anti-pattern) is structurally
@@ -20,9 +23,11 @@ impossible.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Sequence, Tuple
 
 from deepsearch.report.citation import CitationAnnotation
+
+from .url_utils import arxiv_identity
 
 # Marker regex: ``[cite:URL]`` where URL contains no whitespace and no brackets.
 # Whitespace exclusion implicitly rejects ``[cite:not a url]`` (left as literal).
@@ -128,8 +133,10 @@ _REFERENCES_HEADING_RE = re.compile(
 _REFERENCE_ENTRY_RE = re.compile(r"^[ \t]*\[(\d+)\][ \t]*(.+)$", re.MULTILINE)
 
 # A bare URL inside a reference entry. Matches http(s) URLs through the first
-# whitespace / closing-bracket / closing-paren character.
-_URL_RE = re.compile(r"https?://[^\s\)\]]+")
+# whitespace / bracket / unbalanced parenthesis. S98 m07: a balanced "(…)"
+# segment is part of the URL (Wikipedia "Foo_(bar)", archive.org "/(57-59)%20…");
+# a ")" closing a Markdown link or prose aside still ends it.
+_URL_RE = re.compile(r"https?://(?:[^\s()\[\]]|\([^\s()\[\]]*\))+")
 
 # Inline numbered citation marker: `[N]`. Caret-prefixed forms (`[^1]`,
 # Markdown footnotes) and non-numeric forms (`[cite:…]`) do not match.
@@ -164,12 +171,19 @@ _UNICODE_SUPER_REFERENCE_ENTRY_RE = re.compile(
     r"^[ \t]*([" + _UNICODE_SUPER_DIGITS + r"]+)[ \t]+(.+)$",
     re.MULTILINE,
 )
+# S103 m02: a run after a superscript plus or minus sign is an exponent
+# (``10⁻⁶``, ``e⁺²``) in every report.
+_UNICODE_SUPER_SIGNS = "⁺⁻"
 _UNICODE_SUPER_MARKER_RE = re.compile(
     # Lookbehind excludes uppercase letters AND any superscript char so that
     # a mid-run position (e.g. the ``⁰`` inside ``¹⁰``) does not trigger a
     # fresh match after the leading ``¹`` was rejected by the uppercase check.
-    r"(?<![A-Z" + _UNICODE_SUPER_DIGITS + r"])([" + _UNICODE_SUPER_DIGITS + r"]+)"
+    # A reader of a slice must match at its offset in the full text, so the
+    # lookbehind sees the character before the run.
+    r"(?<![A-Z" + _UNICODE_SUPER_DIGITS + _UNICODE_SUPER_SIGNS + r"])"
+    r"([" + _UNICODE_SUPER_DIGITS + r"]+)"
 )
+_UNICODE_SUPER_DIGIT_RE = re.compile(r"[" + _UNICODE_SUPER_DIGITS + r"]")
 
 
 def _super_to_int(token: str) -> int | None:
@@ -259,27 +273,65 @@ def _find_span_start(stripped: str, end_index: int) -> int:
     return start
 
 
+def _source_identity(url: str) -> str:
+    """The source a References link names: its arXiv paper, else the URL itself.
+
+    S100 m02 extends decision 1002's paper identity from collection membership
+    to reading References entries. Body mapping, readability and the probe
+    cache keep exact URLs.
+    """
+    return arxiv_identity(url) or url
+
+
+def _resolve_reference_line(urls: Sequence[str]) -> str | None:
+    """Return a numbered line's first link when all its links name one source.
+
+    A line whose links name different sources, such as a DOI and an unrelated
+    mirror, is ambiguous and resolves to nothing.
+    """
+    return urls[0] if urls and len({_source_identity(url) for url in urls}) == 1 else None
+
+
+def _section_end(markdown: str, heading: re.Match[str]) -> int:
+    """Offset of the next heading at or above a references heading's level."""
+    level = len(heading.group(0).lstrip().split()[0])
+    offset = heading.end()
+    for line in markdown[offset:].splitlines(keepends=True):
+        next_heading = re.match(r"^\s*(#{1,6})\s", line)
+        if next_heading and len(next_heading[1]) <= level:
+            break
+        offset += len(line)
+    return offset
+
+
 def _build_references_map(
     markdown: str, *, telemetry: dict[str, Any] | None = None,
+    merged: set[int] | None = None,
 ) -> Tuple[Dict[int, str], int]:
-    """Resolve only unambiguous numbered entries outside code, without I/O."""
+    """Resolve only unambiguous numbered entries outside code, without I/O.
+
+    The section is the last references heading not nested inside an earlier
+    one; a nested subsection's entries belong to it, as in the finalize audit
+    (S100 m02). A number resolves to its first line's link when every line
+    resolves to one source, and is otherwise an unresolved collision.
+    ``merged`` receives resolved numbers whose lines carry several links.
+    """
     code_spans = _find_code_spans(markdown)
     headings = [m for m in _REFERENCES_HEADING_RE.finditer(markdown)
                 if not _is_inside_span(m.start(), code_spans)]
     if not headings:
         return {}, len(markdown)
-    heading = headings[-1]
-    entries: dict[int, set[str]] = {}
+    heading, section_end = headings[0], _section_end(markdown, headings[0])
+    for candidate in headings[1:]:
+        if candidate.start() >= section_end:
+            heading, section_end = candidate, _section_end(markdown, candidate)
+    entries: dict[int, list[list[str]]] = {}
     prefix = re.compile(
         r"^\s*(?:[-*+]\s+)?(?:\*\*|__)?(?:\[(\d+)\]|(\d+)[.)])"
         r"(?:\*\*|__)?(?:\s|$)(.*)$"
     )
     offset = heading.end()
-    level = len(heading.group(0).lstrip().split()[0])
-    for line in markdown[offset:].splitlines(keepends=True):
-        next_heading = re.match(r"^\s*(#{1,6})\s", line)
-        if next_heading and len(next_heading[1]) <= level:
-            break
+    for line in markdown[offset:section_end].splitlines(keepends=True):
         if not _is_inside_span(offset, code_spans):
             match = prefix.match(line)
             superscript = _UNICODE_SUPER_REFERENCE_ENTRY_RE.match(line)
@@ -295,28 +347,68 @@ def _build_references_map(
                 number = _super_to_int(superscript[1])
                 text = superscript[2]
             if number is not None:
-                urls = {m.group(0).rstrip(".,;:") for m in _URL_RE.finditer(text)}
-                entries.setdefault(number, set()).update(urls)
+                urls = list(dict.fromkeys(
+                    m.group(0).rstrip(".,;:") for m in _URL_RE.finditer(text)))
+                if urls:
+                    entries.setdefault(number, []).append(urls)
         offset += len(line)
-    collisions = {n for n, urls in entries.items() if len(urls) > 1}
+    resolved: dict[int, str] = {}
+    collisions = 0
+    for number, lines in entries.items():
+        links = [_resolve_reference_line(urls) for urls in lines]
+        first = links[0]
+        if first is None or any(
+            link is None or _source_identity(link) != _source_identity(first) for link in links
+        ):
+            collisions += 1
+            continue
+        resolved[number] = first
+        if merged is not None and len({url for urls in lines for url in urls}) > 1:
+            merged.add(number)
     if telemetry is not None:
-        telemetry["reference_number_collisions"] = len(collisions)
-    return {n: next(iter(urls)) for n, urls in entries.items() if len(urls) == 1}, heading.start()
+        telemetry["reference_number_collisions"] = collisions
+    return resolved, heading.start()
 
 
-_TRAILING_READER_MARKERS_RE = re.compile(
-    r"(?:\s*(?:\[\d+\]|(?<![A-Z⁰¹²³⁴⁵⁶⁷⁸⁹])[⁰¹²³⁴⁵⁶⁷⁸⁹]+))+$"
-)
+def _marker_start(markdown: str, at: int, superscripts: bool) -> int | None:
+    """Start of the ``[N]`` or superscript reader marker ending exactly at ``at``."""
+    if at > 0 and markdown[at - 1] == "]":
+        start = at - 2
+        while start >= 0 and markdown[start].isdecimal():
+            start -= 1
+        return start if 0 <= start < at - 2 and markdown[start] == "[" else None
+    if superscripts and at > 0 and markdown[at - 1] in _UNICODE_SUPER_DIGITS:
+        start = at - 1
+        while start > 0 and markdown[start - 1] in _UNICODE_SUPER_DIGITS:
+            start -= 1
+        return start if _UNICODE_SUPER_MARKER_RE.match(markdown, start) else None
+    return None
 
 
-def _claim_end(markdown: str, end: int) -> int:
-    """Ignore a trailing reader-marker cluster only for claim identity/start."""
-    match = _TRAILING_READER_MARKERS_RE.search(markdown[:end])
-    return len(markdown[:match.start() if match else end].rstrip())
+def _claim_end(markdown: str, end: int, *, superscripts: bool) -> int:
+    """Ignore a trailing reader-marker cluster only for claim identity/start.
+
+    S103 m02 walks back from ``end`` over the cluster instead of searching the
+    whole prefix, so the cost follows the cluster, not the report. The result
+    equals the anchored search ``(?:\\s*(?:\\[\\d+\\]|<superscript marker>))+$``
+    on ``markdown[:end]``, whose ``$`` also matches before a final newline.
+    """
+    at = end - 1 if end > 0 and markdown[end - 1] == "\n" else end
+    cut = _marker_start(markdown, at, superscripts)
+    while cut is not None:
+        before = cut
+        while before > 0 and markdown[before - 1].isspace():
+            before -= 1
+        earlier = _marker_start(markdown, before, superscripts)
+        if earlier is None:
+            break
+        cut = earlier
+    return len(markdown[:end if cut is None else cut].rstrip())
 
 
 def _extract_numbered_fallback(
-    markdown: str, *, telemetry: dict[str, Any] | None = None,
+    markdown: str, *, superscripts: bool, telemetry: dict[str, Any] | None = None,
+    merged: List[CitationAnnotation] | None = None,
 ) -> List[CitationAnnotation]:
     """Resolve inline `[N]` and Unicode-superscript markers against the
     trailing References section.
@@ -332,9 +424,13 @@ def _extract_numbered_fallback(
     S79 m01.c (PD95): Unicode superscript markers (``¹``, ``²``, …, ``¹⁰``)
     are scanned alongside the ``[N]`` style, scoped to the body region (up
     to ``body_end`` — the references heading offset). ``(?<!\\w)`` anchors
-    the body match to avoid misclassifying exponents (``T¹⁰``).
+    the body match to avoid misclassifying exponents (``T¹⁰``). S103 m02 scans
+    them only when ``superscripts`` says the report cites that way.
     """
-    refs_map, body_end = _build_references_map(markdown, telemetry=telemetry)
+    merged_numbers: set[int] = set()
+    refs_map, body_end = _build_references_map(
+        markdown, telemetry=telemetry, merged=merged_numbers,
+    )
 
     code_spans = _find_code_spans(markdown[:body_end])
     annotations: List[CitationAnnotation] = []
@@ -352,16 +448,18 @@ def _extract_numbered_fallback(
         # excludes the space immediately preceding the marker.
         while end_index > 0 and markdown[end_index - 1].isspace():
             end_index -= 1
-        start_index = _find_span_start(markdown, _claim_end(markdown, end_index))
-        annotations.append(
-            CitationAnnotation(
-                type="url_citation",
-                start_index=start_index,
-                end_index=end_index,
-                url=url,
-                title=None,
-            )
+        start_index = _find_span_start(
+            markdown, _claim_end(markdown, end_index, superscripts=superscripts))
+        annotation = CitationAnnotation(
+            type="url_citation",
+            start_index=start_index,
+            end_index=end_index,
+            url=url,
+            title=None,
         )
+        annotations.append(annotation)
+        if merged is not None and number in merged_numbers:
+            merged.append(annotation)
 
     for match in _NUMBERED_MARKER_RE.finditer(markdown, 0, body_end):
         if (_is_inside_span(match.start(), code_spans)
@@ -375,7 +473,8 @@ def _extract_numbered_fallback(
             continue
         _emit(match.start(), number)
 
-    for match in _UNICODE_SUPER_MARKER_RE.finditer(markdown, 0, body_end):
+    for match in (_UNICODE_SUPER_MARKER_RE.finditer(markdown, 0, body_end)
+                  if superscripts else ()):
         if _is_inside_span(match.start(), code_spans):
             continue
         super_number = _super_to_int(match.group(1))
@@ -387,6 +486,53 @@ def _extract_numbered_fallback(
         annotation._extraction_mode = "numbered"
     annotations.sort(key=lambda a: (a.end_index, a.start_index))
     return annotations
+
+
+def _labels_in_superscripts(markdown: str) -> bool:
+    """Whether a line outside code labels an entry with a superscript and a URL."""
+    labels = [match.start(1) for match in _UNICODE_SUPER_REFERENCE_ENTRY_RE.finditer(markdown)
+              if _URL_RE.search(match[2])]
+    if not labels:
+        return False
+    code_spans = _find_code_spans(markdown)
+    return any(not _is_inside_span(start, code_spans) for start in labels)
+
+
+def _extract_in_style(
+    markdown: str, telemetry: dict[str, Any] | None,
+) -> Tuple[str, List[CitationAnnotation], bool]:
+    """Extraction with the report's own superscript reading, and that reading."""
+    if not _UNICODE_SUPER_DIGIT_RE.search(markdown):
+        return (*_extract(markdown, telemetry, superscripts=False), False)
+    if _labels_in_superscripts(markdown):
+        return (*_extract(markdown, telemetry, superscripts=True), True)
+    counts: dict[str, Any] = {}
+    stripped, annotations = _extract(markdown, counts, superscripts=False)
+    superscripts = False
+    if not annotations:
+        read_counts: dict[str, Any] = {}
+        read_stripped, read = _extract(markdown, read_counts, superscripts=True)
+        if read:
+            stripped, annotations, counts, superscripts = read_stripped, read, read_counts, True
+    if telemetry is not None:
+        telemetry.update(counts)
+    return stripped, annotations, superscripts
+
+
+def reads_superscripts(markdown: str) -> bool:
+    """Whether a superscript digit run in ``markdown`` can be a reader marker (S103 m02).
+
+    A report reads superscripts when a line outside code labels an entry with one
+    (a superscript run, whitespace, then text holding an http(s) URL), or when they
+    are its only citations: extraction without them finds none and with them at
+    least one. The whole text is read, because the extractor and the audit can
+    disagree on where References starts. Every reader of superscript digits takes
+    its answer from here; a run after an uppercase letter, a superscript digit or a
+    superscript sign is never a marker either way.
+    """
+    if not _UNICODE_SUPER_DIGIT_RE.search(markdown):
+        return False
+    return _labels_in_superscripts(markdown) or _extract_in_style(markdown, None)[2]
 
 
 def extract_citations(
@@ -415,7 +561,15 @@ def extract_citations(
         without trailing reader markers, and exact URL. Distinct URLs at the
         same boundary survive; repeated claims at other positions survive.
         Optional telemetry receives counts only and introduces no I/O dependency.
+        Superscript markers are read only as :func:`reads_superscripts` decides.
     """
+    stripped_markdown, annotations, _ = _extract_in_style(markdown, telemetry)
+    return stripped_markdown, annotations
+
+
+def _extract(
+    markdown: str, telemetry: dict[str, Any] | None, *, superscripts: bool,
+) -> Tuple[str, List[CitationAnnotation]]:
     counts = telemetry if telemetry is not None else {}
     counts.update(primary_annotations=0, numbered_annotations=0, duplicates_removed=0,
                   reference_number_collisions=0, unresolved_numbered_markers=0)
@@ -450,7 +604,8 @@ def extract_citations(
         while end_index > 0 and stripped_so_far[end_index - 1].isspace():
             end_index -= 1
 
-        start_index = _find_span_start(stripped_so_far, _claim_end(stripped_so_far, end_index))
+        start_index = _find_span_start(
+            stripped_so_far, _claim_end(stripped_so_far, end_index, superscripts=superscripts))
 
         annotations.append(
             CitationAnnotation(
@@ -469,15 +624,27 @@ def extract_citations(
     counts["primary_annotations"] = len(annotations)
     for annotation in annotations:
         annotation._extraction_mode = "primary"
-    numbered = _extract_numbered_fallback(stripped_markdown, telemetry=counts)
+    merged: list[CitationAnnotation] = []
+    numbered = _extract_numbered_fallback(
+        stripped_markdown, superscripts=superscripts, telemetry=counts, merged=merged)
     counts["numbered_annotations"] = len(numbered)
     counts["numbered_distinct_urls"] = len({a.url for a in numbered})
+    # S100 m02: a number that resolves only because its links name one source
+    # must not add a second citation of that source to a primary-cited claim.
+    primary_sources = {
+        (a.start_index, _claim_end(stripped_markdown, a.end_index, superscripts=superscripts),
+         _source_identity(a.url))
+        for a in annotations
+    }
+    merged_ids = {id(a) for a in merged}
     reconciled: list[CitationAnnotation] = []
     seen: set[tuple[int, int, str]] = set()
     for annotation in [*annotations, *numbered]:
-        key = (annotation.start_index, _claim_end(stripped_markdown, annotation.end_index),
-               annotation.url)
-        if key in seen:
+        claim_end = _claim_end(stripped_markdown, annotation.end_index, superscripts=superscripts)
+        key = (annotation.start_index, claim_end, annotation.url)
+        if key in seen or (id(annotation) in merged_ids and (
+                annotation.start_index, claim_end, _source_identity(annotation.url),
+        ) in primary_sources):
             counts["duplicates_removed"] += 1
             continue
         seen.add(key)
@@ -487,4 +654,23 @@ def extract_citations(
     return stripped_markdown, reconciled
 
 
-__all__ = ["extract_citations"]
+def is_cited(text: object) -> bool:
+    """Whether runtime text counts as cited (S100 m03).
+
+    The runtime's one definition: the literal ``[cite:`` test used before S100,
+    or at least one annotation from :func:`extract_citations`, so a numbered
+    marker that resolves against the References section counts as it does in
+    finalize. If extraction raises, the literal test's answer stands, so a paid
+    step never fails on this check.
+    """
+    if not isinstance(text, str):
+        return False
+    if "[cite:" in text:
+        return True
+    try:
+        return bool(extract_citations(text)[1])
+    except Exception:  # noqa: BLE001 — advisory check; the literal answer stands
+        return False
+
+
+__all__ = ["extract_citations", "is_cited", "reads_superscripts"]

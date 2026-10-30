@@ -147,7 +147,7 @@ def test_provider_quality_and_paid_attempts_survive_exact_artifact_round_trip(
     assert not telemetry["citation_consistency"]["consistent"]
     assert forensic["quality_record"]["claim_assessment"]["accuracy_pass"] is None
     quality = forensic["quality_record"]
-    assert quality["schema_version"] == 5
+    assert quality["schema_version"] == 6
     assert quality["verification"]["scope"] == "sampled"
     assert quality["verification"]["report_wide_accuracy"] == "unknown"
     assert quality["evidence_dependencies"]["readable_cited_urls"] == 1

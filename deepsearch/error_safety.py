@@ -26,6 +26,8 @@ _CATEGORY_BY_EXCEPTION_CLASS: Final[dict[str, str]] = {
     "AgentExecutionError": "execution",
     "AgentGenerationError": "execution",
     "AgentMaxStepsError": "execution",
+    "APIConnectionError": "transport",
+    "APITimeoutError": "timeout",
     "AuthenticationError": "authentication",
     "CancelledError": "cancelled",
     "CodeAgentRunnerError": "execution",

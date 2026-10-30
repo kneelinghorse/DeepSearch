@@ -43,12 +43,14 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import AbstractSet, Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from pydantic import AnyHttpUrl, TypeAdapter, ValidationError
 
+from deepsearch.agent.quality_series import _has_readable_body
 from deepsearch.agent.tools.url_liveness import url_liveness
+from deepsearch.agent.url_utils import arxiv_identity
 from deepsearch.mission.scope import ScopeAdmission
 from deepsearch.report.citation import CitationAnnotation
 
@@ -682,6 +684,10 @@ async def check_citations_liveness(
                 classification="unknown", live=None
             )
             ann.live = result.live
+        # S101 m03: which dead, uncollected URLs a collected body names needs
+        # every citation's verdict first.
+        source_named = source_named_dead_urls(citation_list, sources_collected)
+        for ann, normalised in zip(citation_list, normalised_per_ann):
             if normalised in seen_for_counts:
                 cache_hits += 1
                 continue
@@ -689,7 +695,10 @@ async def check_citations_liveness(
             # S82 m05 — classify from the probe outcome + sources membership via
             # the shared classifier (critique uses the same one).
             cls = classify_citation(
-                live=result.live, url=ann.url, source_url_set=sources_url_set
+                live=ann.live,
+                url=ann.url,
+                source_url_set=sources_url_set,
+                source_named_urls=source_named,
             )
             if cls == CLASSIFICATION_LIVE:
                 live_count += 1
@@ -698,9 +707,10 @@ async def check_citations_liveness(
             elif cls == CLASSIFICATION_UNKNOWN:
                 unknown_count += 1
             else:
-                # ORPHAN (live, not in sources) or HALLUCINATED (dead, not in
-                # sources). Both are set-membership orphans; only the
-                # probe-failed subset is hallucinated.
+                # ORPHAN (live, not in sources), HALLUCINATED (dead, not in
+                # sources) or DEAD_UNCOLLECTED (dead, not in sources, named by
+                # a collected body). All are set-membership orphans; only the
+                # unnamed probe-failed subset is hallucinated.
                 orphan_count += 1
                 if cls == CLASSIFICATION_HALLUCINATED:
                     hallucinated_count += 1
@@ -814,14 +824,26 @@ _DEAD_LINK_GAP_NOTE = "[Data unavailable in primary sources]"
 _CITE_MARKER_RE = re.compile(r"\[cite:([^\[\]\s]+?)\]")
 
 
+def _source_membership_key(url: str) -> str:
+    """Collection-membership key: the arXiv paper identity, else the cache key.
+
+    S98 m02 (decision 1002) — every arXiv URL form of one paper is one collected
+    source. Only membership uses this key; the probe cache, body trust and the
+    References audit keep :func:`_normalise_url_for_cache`.
+    """
+    return arxiv_identity(url) or _normalise_url_for_cache(url)
+
+
 def build_source_url_set(
     sources_collected: Sequence[Mapping[str, Any]] | None,
 ) -> Set[str]:
-    """Build the NORMALISED collected-sources URL set.
+    """Build the collected-sources membership set.
 
     The single source-set construction shared by the liveness gate, the m02
     quarantine, and (S82 m05) critique — so every consumer's orphan/dead
-    classification agrees on what "in sources" means.
+    classification agrees on what "in sources" means. Keys are
+    :func:`_source_membership_key` values. S98 m06: a URL whose own successful
+    fetch redirected to a collected source (``redirected_from``) is collected.
     """
     sources_url_set: Set[str] = set()
     for src in sources_collected or []:
@@ -830,7 +852,11 @@ def build_source_url_set(
         url = src.get("url")
         if not isinstance(url, str) or not url.strip():
             continue
-        sources_url_set.add(_normalise_url_for_cache(url))
+        sources_url_set.add(_source_membership_key(url))
+        aliases = src.get("redirected_from")
+        for alias in aliases if isinstance(aliases, list) else []:
+            if isinstance(alias, str) and alias.strip():
+                sources_url_set.add(_source_membership_key(alias))
     return sources_url_set
 
 
@@ -892,24 +918,125 @@ CLASSIFICATION_DEAD = "dead"
 CLASSIFICATION_ORPHAN = "orphan"
 CLASSIFICATION_HALLUCINATED = "hallucinated"
 CLASSIFICATION_UNKNOWN = "unknown"
+# S101 m03: a dead, uncollected URL that a collected readable body names
+# verbatim is dead, not fabricated. It survives, flagged unverified.
+CLASSIFICATION_DEAD_UNCOLLECTED = "dead_uncollected"
+
+_URL_BOUNDARY_OPENERS = "(<\"'[*_"
+_URL_BOUNDARY_CLOSERS = ".,;:!?)]}>\"'*_"
+
+
+def _named_at_url_boundary(body: str, url: str) -> bool:
+    """Whether ``body`` holds the exact ``url`` string at a URL boundary.
+
+    Before it: the start of the text, whitespace, or one of ``(<"'[*_``.
+    After it: the end of the text, whitespace, or a run of ``.,;:!?)]}>"'*_``
+    ending at either, where ``)`` or ``]`` does not close a URL holding more
+    openers than closers. A URL followed directly by a letter is a safe miss.
+    """
+    closers = _URL_BOUNDARY_CLOSERS
+    if url.count("(") > url.count(")"):
+        closers = closers.replace(")", "")
+    if url.count("[") > url.count("]"):
+        closers = closers.replace("]", "")
+    start = body.find(url)
+    while start != -1:
+        end = start + len(url)
+        while end < len(body) and body[end] in closers:
+            end += 1
+        if (
+            (start == 0 or body[start - 1].isspace() or body[start - 1] in _URL_BOUNDARY_OPENERS)
+            and (end == len(body) or body[end].isspace())
+        ):
+            return True
+        start = body.find(url, start + 1)
+    return False
+
+
+def _ends_in_stray_closer(url: str) -> bool:
+    """Whether a cited URL ends in a closing character it does not itself open.
+
+    ``…/Foo_(bar)`` balances its parenthesis; ``…/a)`` or ``…/a,`` carries a
+    stray character, a miscopy whose 404 may come from that character alone.
+    """
+    last = url[-1:]
+    if last == ")":
+        return url.count("(") < url.count(")")
+    if last == "]":
+        return url.count("[") < url.count("]")
+    return bool(last) and last in _URL_BOUNDARY_CLOSERS
+
+
+def source_named_dead_urls(
+    citations: Sequence[CitationAnnotation],
+    sources_collected: Sequence[Mapping[str, Any]] | None,
+) -> Set[str]:
+    """Cited dead, uncollected URLs that a collected readable body names (S101 m03).
+
+    A cited URL qualifies when its citation has ``live is False`` (decision
+    824's dead policy), it is not collected under the membership key, and the
+    exact string the agent cited (as written, or its canonical form) occurs at
+    a URL boundary in the ``body`` of a source passing ``_has_readable_body``.
+    A search snippet never qualifies, no URL is normalized for the match, and
+    apex and ``www`` stay distinct. A URL ending in a stray closing character
+    never qualifies. A named URL's normalized twins (fragment, tracking
+    parameters, scheme or host case), which the probe cache and the References
+    audit already read as one URL, share its class.
+    """
+    source_url_set = build_source_url_set(sources_collected)
+    forms: Dict[str, Set[str]] = {}
+    for annotation in citations:
+        if annotation.live is not False or (
+            _source_membership_key(annotation.url) in source_url_set
+        ):
+            continue
+        written = annotation._cited_url or annotation.url
+        forms.setdefault(annotation.url, set()).update(
+            literal for literal in {annotation.url, written}
+            if not _ends_in_stray_closer(literal)
+        )
+    if not any(forms.values()):
+        return set()
+    bodies = [
+        source["body"]
+        for source in sources_collected or []
+        if isinstance(source, Mapping) and isinstance(source.get("body"), str)
+        and _has_readable_body(source)
+    ]
+    named_keys = {
+        _normalise_url_for_cache(url)
+        for url, literals in forms.items()
+        if any(_named_at_url_boundary(body, literal) for literal in literals for body in bodies)
+    }
+    return {url for url in forms if _normalise_url_for_cache(url) in named_keys}
 
 
 def classify_citation(
-    *, live: Optional[bool], url: str, source_url_set: Set[str]
+    *,
+    live: Optional[bool],
+    url: str,
+    source_url_set: Set[str],
+    source_named_urls: AbstractSet[str] = frozenset(),
 ) -> str:
     """Classify a citation from its probe outcome + collected-sources membership.
 
     ``live`` is the probe result on the annotation (True/False/None). Returns
     one of the ``CLASSIFICATION_*`` constants. Set-membership uses the SAME
-    normalisation (:func:`_normalise_url_for_cache`) as
-    :func:`build_source_url_set`, so the gate and critique never disagree.
+    key (:func:`_source_membership_key`) as :func:`build_source_url_set`, so
+    the gate and critique never disagree. ``source_named_urls`` comes from
+    :func:`source_named_dead_urls` over the same citations and sources: such
+    a URL is dead-uncollected rather than hallucinated.
     """
     if live is None:
         return CLASSIFICATION_UNKNOWN
-    in_sources = _normalise_url_for_cache(url) in source_url_set
+    in_sources = _source_membership_key(url) in source_url_set
     if live:
         return CLASSIFICATION_LIVE if in_sources else CLASSIFICATION_ORPHAN
-    return CLASSIFICATION_DEAD if in_sources else CLASSIFICATION_HALLUCINATED
+    if in_sources:
+        return CLASSIFICATION_DEAD
+    if url in source_named_urls:
+        return CLASSIFICATION_DEAD_UNCOLLECTED
+    return CLASSIFICATION_HALLUCINATED
 
 
 def quarantine_dead_citations(
@@ -945,12 +1072,16 @@ def quarantine_dead_citations(
         return citation_list, []
 
     sources_url_set = build_source_url_set(sources_collected)
+    source_named = source_named_dead_urls(citation_list, sources_collected)
 
     surviving: List[CitationAnnotation] = []
     quarantined: List[CitationAnnotation] = []
     for ann in citation_list:
         cls = classify_citation(
-            live=ann.live, url=ann.url, source_url_set=sources_url_set
+            live=ann.live,
+            url=ann.url,
+            source_url_set=sources_url_set,
+            source_named_urls=source_named,
         )
         if cls == CLASSIFICATION_HALLUCINATED:
             quarantined.append(ann)
@@ -997,8 +1128,11 @@ def strip_dead_cite_markers(
     def _replace(match: "re.Match[str]") -> str:
         nonlocal acted
         acted += 1
-        normalised = _normalise_url_for_cache(match.group(1))
-        if normalised in quarantined_normalised and normalised not in sources_url_set:
+        url = match.group(1)
+        if (
+            _normalise_url_for_cache(url) in quarantined_normalised
+            and _source_membership_key(url) not in sources_url_set
+        ):
             return _DEAD_LINK_GAP_NOTE
         return ""
 
@@ -1014,10 +1148,12 @@ __all__ = [
     "CLASSIFICATION_ORPHAN",
     "CLASSIFICATION_HALLUCINATED",
     "CLASSIFICATION_UNKNOWN",
+    "CLASSIFICATION_DEAD_UNCOLLECTED",
     "LivenessTelemetry",
     "build_source_url_set",
     "classify_citation",
     "check_citations_liveness",
     "quarantine_dead_citations",
+    "source_named_dead_urls",
     "strip_dead_cite_markers",
 ]

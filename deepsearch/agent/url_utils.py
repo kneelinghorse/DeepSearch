@@ -5,7 +5,9 @@ S75 m01 Phase D (Option A refactor): split the two consumers — ``resolve_sourc
 (used by ``agent/slot_coverage.py``) — out of ``source_quality.py`` so the rest of
 that module's LLM-as-judge admission stack could be deleted alongside the bypassed
 LangGraph nodes. No I/O, no external state; pure URL parsing + Google-grounding
-redirect resolution.
+redirect resolution. S98 m02 adds ``arxiv_identity``, the paper identity shared by
+the collection-membership boundaries (liveness classification and evidence
+dependencies).
 """
 
 from __future__ import annotations
@@ -144,4 +146,49 @@ def resolve_source_url(url: str, source: Optional[Dict[str, Any]] = None) -> str
     return url
 
 
-__all__ = ["extract_domain", "resolve_source_url"]
+# arXiv paper IDs: new-style YYMM.NNNN(N), or old-style archive[.SUBJECT]/YYMMNNN
+# whose subject class arXiv does not need to resolve the paper.
+_ARXIV_ID = (
+    r"(?P<id>\d{4}\.\d{4,5}"
+    r"|(?P<archive>[a-z]+(?:-[a-z]+)*)(?:\.[a-z]{2})?/(?P<number>\d{7}))"
+)
+_ARXIV_PAGE_RE = re.compile(r"/(?:abs|pdf|html)/" + _ARXIV_ID + r"(?:v\d+)?(?:\.pdf)?/?", re.I)
+# DataCite prefix 10.48550 has exactly one client, arXiv (verified 2026-10-28).
+_ARXIV_DOI_RE = re.compile(r"/10\.48550/arxiv\." + _ARXIV_ID + r"(?:v\d+)?/?", re.I)
+_ARXIV_HOSTS = frozenset({"arxiv.org", "www.arxiv.org", "export.arxiv.org"})
+_DOI_HOSTS = frozenset({"doi.org", "dx.doi.org"})
+
+
+def arxiv_identity(url: str) -> Optional[str]:
+    """Return ``arxiv:<id>`` without its version for an arXiv paper URL, else None.
+
+    Recognizes the abs, pdf and html pages and the arXiv DOI
+    (``doi.org/10.48550/arXiv.<id>``, any case). This identity answers collection
+    membership — "did the run collect this paper" — and, since S100 m02, whether
+    one References entry's links name one paper. Readable bodies, probe caching
+    and the References audit's body mapping keep exact URLs, because an abstract
+    page is not the full text.
+    """
+    if not isinstance(url, str):
+        return None
+    try:
+        parsed = urlparse(url.strip())
+    except ValueError:
+        return None
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme.lower() not in {"http", "https"}:
+        return None
+    if host in _ARXIV_HOSTS:
+        match = _ARXIV_PAGE_RE.fullmatch(parsed.path)
+    elif host in _DOI_HOSTS:
+        match = _ARXIV_DOI_RE.fullmatch(parsed.path)
+    else:
+        return None
+    if not match:
+        return None
+    if match.group("archive"):
+        return f"arxiv:{match.group('archive').lower()}/{match.group('number')}"
+    return f"arxiv:{match.group('id')}"
+
+
+__all__ = ["arxiv_identity", "extract_domain", "resolve_source_url"]

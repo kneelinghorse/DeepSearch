@@ -140,7 +140,8 @@ def test_quality_record_carries_all_reconciled_quality_facts() -> None:
 
     # v3 (S90): context_truncation gained critique_cited_dropped +
     # evidence_loss_occurred. Additive — every v2 field kept its meaning.
-    assert record["schema_version"] == QUALITY_RECORD_SCHEMA_VERSION == 5
+    # v6 (S102): a version 2 claim assessment adds verdict-provenance counts.
+    assert record["schema_version"] == QUALITY_RECORD_SCHEMA_VERSION == 6
     assert record["critique"] == {
         "status": "ok",
         "applied": 3,

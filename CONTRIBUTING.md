@@ -46,8 +46,9 @@ prefer different attribution, say so in the pull request.
 
 ## Security
 
-Please don't report vulnerabilities in public issues. Use the repository's private security-reporting channel when it is available; do not post secrets
-or vulnerability details in a public issue.
+Please don't report vulnerabilities in public issues. Report them through the
+repository's private vulnerability reporting, as `SECURITY.md` describes; do not
+post secrets or vulnerability details in a public issue.
 
 ## Release sync ownership
 

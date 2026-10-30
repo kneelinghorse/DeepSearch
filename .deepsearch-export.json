@@ -28,7 +28,7 @@
     {
       "mode": 420,
       "path": "CONTRIBUTING.md",
-      "sha256": "242113573f98998c2c72c0ce976466a48673602b548f9d87d341a096a74e7166"
+      "sha256": "c76c64410c22fa811defbdfbe8a8fce1d4d295af75df6f699f396d3ff062e223"
     },
     {
       "mode": 420,
@@ -49,6 +49,11 @@
       "mode": 420,
       "path": "README.md",
       "sha256": "0cb1e12b701bc4d70fa3aef8666503e2a8066f6dec8b674f0e3325641968e4fd"
+    },
+    {
+      "mode": 420,
+      "path": "SECURITY.md",
+      "sha256": "0b5845d93d876001f1651ee784eeb87fa87f6c4128c94648b8876013ddeb1fec"
     },
     {
       "mode": 420,
@@ -73,32 +78,32 @@
     {
       "mode": 420,
       "path": "deepsearch/agent/citation_extraction.py",
-      "sha256": "1c8634057c0d189e05f4e0747e4f082b86eb8696698f02e03b3cbd04d3eeee20"
+      "sha256": "8429772dbcc948d1478dbf47bed90500b51cc579a442a6ae5f8154518f7bb29b"
     },
     {
       "mode": 420,
       "path": "deepsearch/agent/citation_liveness.py",
-      "sha256": "bf8bd8fbbe24489c68cddc46d0e47b3c7086f044ebc6c5cf8cc9bd501ec48e66"
+      "sha256": "9c1a7ec8640f48d91c24df3e53f0d840ed74190095fb8b5b74dae16a4dbf28e8"
     },
     {
       "mode": 420,
       "path": "deepsearch/agent/citation_surface.py",
-      "sha256": "7b5b5c26b1d719d690b6a51caaa4aa8a364eeca56166740931c197ab35d63f09"
+      "sha256": "99a38ce3dc6d92e7b6d3e0502f88dea5f5594c62fa44c6ae5a9f1dfdf0d4264b"
     },
     {
       "mode": 420,
       "path": "deepsearch/agent/codeagent_finalize_node.py",
-      "sha256": "b1fd113f5cb73c0d9a0a2b52e04c9f96efff5f3332c07ccd58afff5a5418bf6d"
+      "sha256": "469b0aae67aba2e3d5d57bcc8e03aadafd81a392e328f9451545e6947bbd8d27"
     },
     {
       "mode": 420,
       "path": "deepsearch/agent/codeagent_runner.py",
-      "sha256": "bfb54c8eb94a3747c9d7062902581e4e369914d5a079728bf2c30c7b6b28c6e5"
+      "sha256": "6f869582a4ee523798a89cf44324f6cd9309a6a4efae4b7708210b91e13e7544"
     },
     {
       "mode": 420,
       "path": "deepsearch/agent/completion_control.py",
-      "sha256": "a27f94408a53886c2db2faf7324ecd712e546a1fd359dc26284e222a19cfa4b8"
+      "sha256": "b51ad39ea05a1f3980ea4c2ea09e0d884583fcff91e4e4a2354b81510ed09274"
     },
     {
       "mode": 420,
@@ -108,7 +113,7 @@
     {
       "mode": 420,
       "path": "deepsearch/agent/contract_to_prompt.py",
-      "sha256": "06ac943110624862473f0dbb10a667b5f8033132937d7498de18ca3b9f8bea3d"
+      "sha256": "791a8893b2f7e69fd58f3b68d8ba924949304c57fcad00a8638a4f946725a313"
     },
     {
       "mode": 420,
@@ -123,12 +128,12 @@
     {
       "mode": 420,
       "path": "deepsearch/agent/critique.py",
-      "sha256": "aae2075945c2a3ccf9108bb3bcc2209783f9b4a09392687d1e13cc90ebdf325a"
+      "sha256": "d453d9068eb4aca199e1ac09960376af04a8adea4f54b4480c6cb9415ca081cf"
     },
     {
       "mode": 420,
       "path": "deepsearch/agent/critique_evidence.py",
-      "sha256": "a2f0be6202a7a5dfd39584b9c92aaece491a8aa7f4cbd24b1f480cabe8fd9d17"
+      "sha256": "1bcdc98260f321a2f2e24541cdb73c179a34b00301e7802a4c152499ef38c9b0"
     },
     {
       "mode": 420,
@@ -178,17 +183,17 @@
     {
       "mode": 420,
       "path": "deepsearch/agent/llm_client.py",
-      "sha256": "df1205c9db717c3bb280cdaee0753341f3cd18625dcd47cefb61b18bace84668"
+      "sha256": "403666bfb5cebbf38366d3a822fcb607c572621fda900dc2317a351474b2ba17"
     },
     {
       "mode": 420,
       "path": "deepsearch/agent/outcome.py",
-      "sha256": "77e006c16fe5951e139c052b48a9374fa3f8a3857c272923186a9a168fcd8df3"
+      "sha256": "4341fa9ae7215c447577960a03a1771c231b9a7e763dfc673c7bee8f6cd143fc"
     },
     {
       "mode": 420,
       "path": "deepsearch/agent/quality_series.py",
-      "sha256": "6e84ee8196587f4bb1f45270c71893f962ffd833c3f87bff1c0765cb2021b133"
+      "sha256": "2aca92242891c29437d58ec1760c40f79f0522790d80e634ac2f3813ce3ddd62"
     },
     {
       "mode": 420,
@@ -248,7 +253,7 @@
     {
       "mode": 420,
       "path": "deepsearch/agent/tools/completeness_check.py",
-      "sha256": "4ea3a7b3ba24a8d24016e709627c7b06202191448a9838656cecf70efceb9476"
+      "sha256": "ebe7c4187742c1518e24af3f6d266af0df8233a0f6fe8902cbbca902a35a40a2"
     },
     {
       "mode": 420,
@@ -288,7 +293,7 @@
     {
       "mode": 420,
       "path": "deepsearch/agent/url_utils.py",
-      "sha256": "1cd5a3bc19e0e2c3c62a7de97195c396ce42198eb5ca3727a3bb9c457bc9ef17"
+      "sha256": "2881cf8b230e327f41afd8d08b80ccb4777325b96ec6f6ebdd1c799278b1ba02"
     },
     {
       "mode": 420,
@@ -393,7 +398,7 @@
     {
       "mode": 420,
       "path": "deepsearch/error_safety.py",
-      "sha256": "2878ecdf2cde4d4e3ba04900d2fca8d87a477007e9243977b003d9d9df8d5d78"
+      "sha256": "de95dfb5f37d53c4a543ea4d11a6165ac2a3a2818a2dec1b148bfd03e312b9e5"
     },
     {
       "mode": 420,
@@ -458,7 +463,7 @@
     {
       "mode": 420,
       "path": "deepsearch/llm/runtime.py",
-      "sha256": "3e9f054fa7f9c0bf60ee5fa04ccaa34234341424be9806c660a157eafd8c6d48"
+      "sha256": "fc013d9026be45bd539c3f0b7f6966eed1c2accb0d1efec5d6edd08893efa13f"
     },
     {
       "mode": 420,
@@ -533,7 +538,7 @@
     {
       "mode": 420,
       "path": "deepsearch/report/citation.py",
-      "sha256": "3bee3d7b9776bd3b4acdb6016ec3a477e4ac7736001fec530e06bf41ef51af93"
+      "sha256": "14328f84e5ca33e1a14e00042805e4f635d39b760531d5b854255a39a870bed5"
     },
     {
       "mode": 420,
@@ -808,7 +813,7 @@
     {
       "mode": 420,
       "path": "docs/public_export.md",
-      "sha256": "eadec97a26b478bb679357547008bcb16b5ba58ea9a5f33b17fdc17f842f284b"
+      "sha256": "6537edc1da6cca27aeedbe2b2ebb8ccfbbf715b51ed84fd9287d686d07134cb3"
     },
     {
       "mode": 420,
@@ -823,12 +828,12 @@
     {
       "mode": 420,
       "path": "docs/s96_quality_and_diagnostics_contract.md",
-      "sha256": "f83c79e63fa25d5a9a36957337a72d60785cbf0b32f8a59b562cbc27d80ac4be"
+      "sha256": "70048a2cfd0bdb589c2718c9c42d70ae8614926eb24cf385a43e7d9d360afc66"
     },
     {
       "mode": 420,
       "path": "docs/s97_test_census.json",
-      "sha256": "12a574a683a1abb4058f640700e8b744ae5928d6bd89f6c31b7573dde9f18033"
+      "sha256": "6dd38ee25695cf6bdcb6874d17141281e91d994065f74656903b247f35cd79be"
     },
     {
       "mode": 420,
@@ -903,7 +908,7 @@
     {
       "mode": 420,
       "path": "tests/fixtures/authored_scope_v1/actor-system.txt",
-      "sha256": "7af608fd09031d1c02e32d1c54af93e234b3f219e06322fd3e7c796733ce36f2"
+      "sha256": "48040a66ab6a06983fcc47cc096f3aa36ad0dece6bdb8985a3462926f4b0ecd6"
     },
     {
       "mode": 420,
@@ -938,7 +943,7 @@
     {
       "mode": 420,
       "path": "tests/fixtures/authored_scope_v1/manifest.json",
-      "sha256": "db256e5821393ca9750b704714b8e76803e3e8f7de86255a6f83d9d7cc0114cc"
+      "sha256": "9eb5deaa167177d46eb86ac45b0e237fb5e200dab8da84c3cdd7b0576baa0ba5"
     },
     {
       "mode": 420,
@@ -1233,7 +1238,7 @@
     {
       "mode": 420,
       "path": "tests/integration/test_s93_acceptance.py",
-      "sha256": "691b997c051d75414500221042dcf755385206c76b83c393ae7625f0276ec2a1"
+      "sha256": "c5b96aab99a816b421f89595a01ad6881b9da1f1d3eeb9e46a794e1984151761"
     },
     {
       "mode": 420,
@@ -1458,7 +1463,7 @@
     {
       "mode": 420,
       "path": "tests/unit/test_citation_invariants.py",
-      "sha256": "9dfd11d26832ee6f55d1d2f342cacec11ab74f55ac3bbc6be01d9b3c157a4d35"
+      "sha256": "609487186fe82ba5591118cfe10962427f8591a6ea4f66e53a4edc73468aed16"
     },
     {
       "mode": 420,
@@ -1488,12 +1493,12 @@
     {
       "mode": 420,
       "path": "tests/unit/test_codeagent_finalize_node.py",
-      "sha256": "9241c55caf4a7c8faf56e6523ca9a78ac45bb52dc074ddd3cf2be312a866068e"
+      "sha256": "5507d6561d07a8024843043ea0429d05c804539c52aa9273566670797abf0973"
     },
     {
       "mode": 420,
       "path": "tests/unit/test_codeagent_runner.py",
-      "sha256": "8cd66f5a82051e382f7511590ec521cf7a8ad434ee60f95ab4892516f4fef001"
+      "sha256": "e2f4bb2b99b07e7065843f35d9dc62bccb70d1b4fa01cec928c8da94df1f37bf"
     },
     {
       "mode": 420,
@@ -1712,6 +1717,11 @@
     },
     {
       "mode": 420,
+      "path": "tests/unit/test_provider_outage_bounds.py",
+      "sha256": "84dbb6e12b50a629a7788014ced14aea29aaff6f6e961b6d739c36b51f81b5d6"
+    },
+    {
+      "mode": 420,
       "path": "tests/unit/test_query_planner_disambiguation.py",
       "sha256": "14cc4e74c56e698ad0884a6df89e607dd1f091187586c4b80722296e76932f55"
     },
@@ -1754,6 +1764,56 @@
       "mode": 420,
       "path": "tests/unit/test_row_to_state_converter.py",
       "sha256": "f294fe8d5c6b205cd41f46a97bdd4b7556c8911065411f8a98c817b51ea4492a"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s100_cited_definition.py",
+      "sha256": "8550df13a9c347c39fd1e41a9ae742af669810e5bffbbf6545a1fca756b099b1"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s100_redirect_readability.py",
+      "sha256": "a174bc7227df1e272bc95b581caf2832e83379c2e64074412e226a915b5a6af4"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s100_reference_entries.py",
+      "sha256": "2539fa7dae6fa3fedca66008bc95e922f216cf4cae7465d567859ef11f0749d6"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s101_reader_numbers.py",
+      "sha256": "5ce1a020284be3dc7514cfe161dfed95d1f0e6e4d0f152231f357e8db21a7bce"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s101_source_named_dead.py",
+      "sha256": "7203bd3182a7cb3b166f7e05c1835cafe71e04e3b068981eff8b835b1d8f58bb"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s102_quote_matching.py",
+      "sha256": "18affd6b746f7143c267797593c6bb74f3db836dbab8d1fd837d97efa3c89868"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s102_references_entry_citations.py",
+      "sha256": "b9b368029f22e65f13fb56b7a387cc2a5c068790cdbeac06dffcd0ab29abaec6"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s102_verdict_provenance.py",
+      "sha256": "15f46d12b87cad1eb7ba3c48b8e737dfd33727b0591dabd8e1a67d0be7020648"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s103_cited_passages.py",
+      "sha256": "79d281988c4ac8deb31bc498f8bcb6b51b5d0e79f1e16fe4237b644d48ab2e0c"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s103_superscript_style.py",
+      "sha256": "da443e0bcdf1cb0960c857e944ac8bd8c7dfc4c0e9d8987094484239ef755e64"
     },
     {
       "mode": 420,
@@ -1868,7 +1928,7 @@
     {
       "mode": 420,
       "path": "tests/unit/test_s82_m05_invariants.py",
-      "sha256": "5f52b1462a76f38e5c0939eba0f568bfecc4bbbfc10c3b24aad41d1e49544c87"
+      "sha256": "0b708dc947bdbb4211fc1b8147110685135464ce81f075aab7c9045bb9737ae3"
     },
     {
       "mode": 420,
@@ -1938,7 +1998,7 @@
     {
       "mode": 420,
       "path": "tests/unit/test_s87_m04_invariants.py",
-      "sha256": "ab977fa156c47d6887e5b4ae2b9cacba3ef99d25437b06f64c2b18a7a0b8820b"
+      "sha256": "1bf06120c881a352fe20964d266412d700018cbaae1e22e8067ec5a4ea9a23d8"
     },
     {
       "mode": 420,
@@ -2013,7 +2073,7 @@
     {
       "mode": 420,
       "path": "tests/unit/test_s93_citation_surface.py",
-      "sha256": "aedc402b10dca7295ad1e68575624a08c634693f51136d56f89d30ebc249f6b4"
+      "sha256": "f9051a47d766eda38530e7cef32ed92ef9753f964f84f3660f51a11189ccad35"
     },
     {
       "mode": 420,
@@ -2023,7 +2083,7 @@
     {
       "mode": 420,
       "path": "tests/unit/test_s93_coverage.py",
-      "sha256": "8c9cb705c79a8dc21b87c369485674ba3adfb40987f719cb7563027701914943"
+      "sha256": "69bf910f185938380bd8ef751ca10bbaf1898b425f347b46d10af03cacfc3a48"
     },
     {
       "mode": 420,
@@ -2068,7 +2128,7 @@
     {
       "mode": 420,
       "path": "tests/unit/test_s96_quality_signals.py",
-      "sha256": "7d8d9b594b108f212ae0cbd8363659e610b1bf9988f33fed8ff202773e1b4cd2"
+      "sha256": "1b1e49d945966202f66c834215a02085550852ddd8d38d215e60119c28ef3d30"
     },
     {
       "mode": 420,
@@ -2099,6 +2159,36 @@
       "mode": 420,
       "path": "tests/unit/test_s97_record_folder_guard.py",
       "sha256": "1ac9d2a71a135b603fbf3d928b3e204ab72f29eeaea5bbe9c5292c51f43c41f7"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s98_arxiv_identity.py",
+      "sha256": "861bc6461e9636cdfcbb9453dbd401f497906f3601f33b084cb76ad8dc2b217f"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s98_deliverable_headings.py",
+      "sha256": "9a74e428705e7c910baf988c6cdca8ddf4c1930720ed8207f52550d662d4b010"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s98_redirect_identity.py",
+      "sha256": "c9dc195807cb8fafe148febf832768751bffbfabd132dd4ede4fc3b6d2bd222f"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s98_reference_url_parentheses.py",
+      "sha256": "a6fb589b369cc5b3eff43d2975e6edddc285fa10e2898539800368816c92acea"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s98_source_list_references.py",
+      "sha256": "8af470a4f0a2742663f033b6d59e9a4ff8f2f0a264484ceb0d9bf0cffc0f0bb0"
+    },
+    {
+      "mode": 420,
+      "path": "tests/unit/test_s99_heading_remedies.py",
+      "sha256": "195f8e74d2726dc48e92295493975fa687920951f00c38e455652062703ce4e5"
     },
     {
       "mode": 420,
@@ -2192,7 +2282,7 @@
     }
   ],
   "format": "deepsearch-public-v1",
-  "manifest_sha256": "0a46a7f60df12da6d0c9e74061ba4fbd21260b674283b3a4faf3e90bf5a17c7e",
+  "manifest_sha256": "99bf7ed6b3587c1c50886ef2ad1acfbe1fc3b5e4835914367a3baf8fd8777564",
   "reviewed_manifest": {
     "files": [
       {
@@ -2241,7 +2331,7 @@
         "mode": 420,
         "path": "CONTRIBUTING.md",
         "publication": "approved",
-        "sha256": "242113573f98998c2c72c0ce976466a48673602b548f9d87d341a096a74e7166"
+        "sha256": "c76c64410c22fa811defbdfbe8a8fce1d4d295af75df6f699f396d3ff062e223"
       },
       {
         "basis": "First-party repository configuration, documentation, schema or maintenance code; no third-party distribution bundled.",
@@ -2274,6 +2364,14 @@
         "path": "README.md",
         "publication": "approved",
         "sha256": "0cb1e12b701bc4d70fa3aef8666503e2a8066f6dec8b674f0e3325641968e4fd"
+      },
+      {
+        "basis": "First-party repository configuration, documentation, schema or maintenance code; no third-party distribution bundled.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "SECURITY.md",
+        "publication": "approved",
+        "sha256": "0b5845d93d876001f1651ee784eeb87fa87f6c4128c94648b8876013ddeb1fec"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2313,7 +2411,7 @@
         "mode": 420,
         "path": "deepsearch/agent/citation_extraction.py",
         "publication": "approved",
-        "sha256": "1c8634057c0d189e05f4e0747e4f082b86eb8696698f02e03b3cbd04d3eeee20"
+        "sha256": "8429772dbcc948d1478dbf47bed90500b51cc579a442a6ae5f8154518f7bb29b"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2321,7 +2419,7 @@
         "mode": 420,
         "path": "deepsearch/agent/citation_liveness.py",
         "publication": "approved",
-        "sha256": "bf8bd8fbbe24489c68cddc46d0e47b3c7086f044ebc6c5cf8cc9bd501ec48e66"
+        "sha256": "9c1a7ec8640f48d91c24df3e53f0d840ed74190095fb8b5b74dae16a4dbf28e8"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2329,7 +2427,7 @@
         "mode": 420,
         "path": "deepsearch/agent/citation_surface.py",
         "publication": "approved",
-        "sha256": "7b5b5c26b1d719d690b6a51caaa4aa8a364eeca56166740931c197ab35d63f09"
+        "sha256": "99a38ce3dc6d92e7b6d3e0502f88dea5f5594c62fa44c6ae5a9f1dfdf0d4264b"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2337,7 +2435,7 @@
         "mode": 420,
         "path": "deepsearch/agent/codeagent_finalize_node.py",
         "publication": "approved",
-        "sha256": "b1fd113f5cb73c0d9a0a2b52e04c9f96efff5f3332c07ccd58afff5a5418bf6d"
+        "sha256": "469b0aae67aba2e3d5d57bcc8e03aadafd81a392e328f9451545e6947bbd8d27"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2345,7 +2443,7 @@
         "mode": 420,
         "path": "deepsearch/agent/codeagent_runner.py",
         "publication": "approved",
-        "sha256": "bfb54c8eb94a3747c9d7062902581e4e369914d5a079728bf2c30c7b6b28c6e5"
+        "sha256": "6f869582a4ee523798a89cf44324f6cd9309a6a4efae4b7708210b91e13e7544"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2353,7 +2451,7 @@
         "mode": 420,
         "path": "deepsearch/agent/completion_control.py",
         "publication": "approved",
-        "sha256": "a27f94408a53886c2db2faf7324ecd712e546a1fd359dc26284e222a19cfa4b8"
+        "sha256": "b51ad39ea05a1f3980ea4c2ea09e0d884583fcff91e4e4a2354b81510ed09274"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2369,7 +2467,7 @@
         "mode": 420,
         "path": "deepsearch/agent/contract_to_prompt.py",
         "publication": "approved",
-        "sha256": "06ac943110624862473f0dbb10a667b5f8033132937d7498de18ca3b9f8bea3d"
+        "sha256": "791a8893b2f7e69fd58f3b68d8ba924949304c57fcad00a8638a4f946725a313"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2393,7 +2491,7 @@
         "mode": 420,
         "path": "deepsearch/agent/critique.py",
         "publication": "approved",
-        "sha256": "aae2075945c2a3ccf9108bb3bcc2209783f9b4a09392687d1e13cc90ebdf325a"
+        "sha256": "d453d9068eb4aca199e1ac09960376af04a8adea4f54b4480c6cb9415ca081cf"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2401,7 +2499,7 @@
         "mode": 420,
         "path": "deepsearch/agent/critique_evidence.py",
         "publication": "approved",
-        "sha256": "a2f0be6202a7a5dfd39584b9c92aaece491a8aa7f4cbd24b1f480cabe8fd9d17"
+        "sha256": "1bcdc98260f321a2f2e24541cdb73c179a34b00301e7802a4c152499ef38c9b0"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2481,7 +2579,7 @@
         "mode": 420,
         "path": "deepsearch/agent/llm_client.py",
         "publication": "approved",
-        "sha256": "df1205c9db717c3bb280cdaee0753341f3cd18625dcd47cefb61b18bace84668"
+        "sha256": "403666bfb5cebbf38366d3a822fcb607c572621fda900dc2317a351474b2ba17"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2489,7 +2587,7 @@
         "mode": 420,
         "path": "deepsearch/agent/outcome.py",
         "publication": "approved",
-        "sha256": "77e006c16fe5951e139c052b48a9374fa3f8a3857c272923186a9a168fcd8df3"
+        "sha256": "4341fa9ae7215c447577960a03a1771c231b9a7e763dfc673c7bee8f6cd143fc"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2497,7 +2595,7 @@
         "mode": 420,
         "path": "deepsearch/agent/quality_series.py",
         "publication": "approved",
-        "sha256": "6e84ee8196587f4bb1f45270c71893f962ffd833c3f87bff1c0765cb2021b133"
+        "sha256": "2aca92242891c29437d58ec1760c40f79f0522790d80e634ac2f3813ce3ddd62"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2593,7 +2691,7 @@
         "mode": 420,
         "path": "deepsearch/agent/tools/completeness_check.py",
         "publication": "approved",
-        "sha256": "4ea3a7b3ba24a8d24016e709627c7b06202191448a9838656cecf70efceb9476"
+        "sha256": "ebe7c4187742c1518e24af3f6d266af0df8233a0f6fe8902cbbca902a35a40a2"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2657,7 +2755,7 @@
         "mode": 420,
         "path": "deepsearch/agent/url_utils.py",
         "publication": "approved",
-        "sha256": "1cd5a3bc19e0e2c3c62a7de97195c396ce42198eb5ca3727a3bb9c457bc9ef17"
+        "sha256": "2881cf8b230e327f41afd8d08b80ccb4777325b96ec6f6ebdd1c799278b1ba02"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2825,7 +2923,7 @@
         "mode": 420,
         "path": "deepsearch/error_safety.py",
         "publication": "approved",
-        "sha256": "2878ecdf2cde4d4e3ba04900d2fca8d87a477007e9243977b003d9d9df8d5d78"
+        "sha256": "de95dfb5f37d53c4a543ea4d11a6165ac2a3a2818a2dec1b148bfd03e312b9e5"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -2929,7 +3027,7 @@
         "mode": 420,
         "path": "deepsearch/llm/runtime.py",
         "publication": "approved",
-        "sha256": "3e9f054fa7f9c0bf60ee5fa04ccaa34234341424be9806c660a157eafd8c6d48"
+        "sha256": "fc013d9026be45bd539c3f0b7f6966eed1c2accb0d1efec5d6edd08893efa13f"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -3049,7 +3147,7 @@
         "mode": 420,
         "path": "deepsearch/report/citation.py",
         "publication": "approved",
-        "sha256": "3bee3d7b9776bd3b4acdb6016ec3a477e4ac7736001fec530e06bf41ef51af93"
+        "sha256": "14328f84e5ca33e1a14e00042805e4f635d39b760531d5b854255a39a870bed5"
       },
       {
         "basis": "First-party Python runtime/API/evaluation source; implementation and inline examples reviewed, no captured report or vendor documentation payload.",
@@ -3489,7 +3587,7 @@
         "mode": 420,
         "path": "docs/public_export.md",
         "publication": "approved",
-        "sha256": "eadec97a26b478bb679357547008bcb16b5ba58ea9a5f33b17fdc17f842f284b"
+        "sha256": "6537edc1da6cca27aeedbe2b2ebb8ccfbbf715b51ed84fd9287d686d07134cb3"
       },
       {
         "basis": "First-party repository configuration, documentation, schema or maintenance code; no third-party distribution bundled.",
@@ -3513,7 +3611,7 @@
         "mode": 420,
         "path": "docs/s96_quality_and_diagnostics_contract.md",
         "publication": "approved",
-        "sha256": "f83c79e63fa25d5a9a36957337a72d60785cbf0b32f8a59b562cbc27d80ac4be"
+        "sha256": "70048a2cfd0bdb589c2718c9c42d70ae8614926eb24cf385a43e7d9d360afc66"
       },
       {
         "basis": "First-party repository configuration, documentation, schema or maintenance code; no third-party distribution bundled.",
@@ -3521,7 +3619,7 @@
         "mode": 420,
         "path": "docs/s97_test_census.json",
         "publication": "approved",
-        "sha256": "12a574a683a1abb4058f640700e8b744ae5928d6bd89f6c31b7573dde9f18033"
+        "sha256": "6dd38ee25695cf6bdcb6874d17141281e91d994065f74656903b247f35cd79be"
       },
       {
         "basis": "First-party repository configuration, documentation, schema or maintenance code; no third-party distribution bundled.",
@@ -3641,7 +3739,7 @@
         "mode": 420,
         "path": "tests/fixtures/authored_scope_v1/actor-system.txt",
         "publication": "approved",
-        "sha256": "7af608fd09031d1c02e32d1c54af93e234b3f219e06322fd3e7c796733ce36f2"
+        "sha256": "48040a66ab6a06983fcc47cc096f3aa36ad0dece6bdb8985a3462926f4b0ecd6"
       },
       {
         "basis": "First-party authored S94 parity package. docs/authored_scope.md and the generating integration tests establish deterministic contracts/prompts/audits and repeated-evidence boundary outputs. Actual content contains public PostgreSQL URL references, not captured documentation prose or a production research report.",
@@ -3697,7 +3795,7 @@
         "mode": 420,
         "path": "tests/fixtures/authored_scope_v1/manifest.json",
         "publication": "approved",
-        "sha256": "db256e5821393ca9750b704714b8e76803e3e8f7de86255a6f83d9d7cc0114cc"
+        "sha256": "9eb5deaa167177d46eb86ac45b0e237fb5e200dab8da84c3cdd7b0576baa0ba5"
       },
       {
         "basis": "First-party authored S94 parity package. docs/authored_scope.md and the generating integration tests establish deterministic contracts/prompts/audits and repeated-evidence boundary outputs. Actual content contains public PostgreSQL URL references, not captured documentation prose or a production research report.",
@@ -4169,7 +4267,7 @@
         "mode": 420,
         "path": "tests/integration/test_s93_acceptance.py",
         "publication": "approved",
-        "sha256": "691b997c051d75414500221042dcf755385206c76b83c393ae7625f0276ec2a1"
+        "sha256": "c5b96aab99a816b421f89595a01ad6881b9da1f1d3eeb9e46a794e1984151761"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -4529,7 +4627,7 @@
         "mode": 420,
         "path": "tests/unit/test_citation_invariants.py",
         "publication": "approved",
-        "sha256": "9dfd11d26832ee6f55d1d2f342cacec11ab74f55ac3bbc6be01d9b3c157a4d35"
+        "sha256": "609487186fe82ba5591118cfe10962427f8591a6ea4f66e53a4edc73468aed16"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -4577,7 +4675,7 @@
         "mode": 420,
         "path": "tests/unit/test_codeagent_finalize_node.py",
         "publication": "approved",
-        "sha256": "9241c55caf4a7c8faf56e6523ca9a78ac45bb52dc074ddd3cf2be312a866068e"
+        "sha256": "5507d6561d07a8024843043ea0429d05c804539c52aa9273566670797abf0973"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -4585,7 +4683,7 @@
         "mode": 420,
         "path": "tests/unit/test_codeagent_runner.py",
         "publication": "approved",
-        "sha256": "8cd66f5a82051e382f7511590ec521cf7a8ad434ee60f95ab4892516f4fef001"
+        "sha256": "e2f4bb2b99b07e7065843f35d9dc62bccb70d1b4fa01cec928c8da94df1f37bf"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -4935,6 +5033,14 @@
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
         "license": "MIT",
         "mode": 420,
+        "path": "tests/unit/test_provider_outage_bounds.py",
+        "publication": "approved",
+        "sha256": "84dbb6e12b50a629a7788014ced14aea29aaff6f6e961b6d739c36b51f81b5d6"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
         "path": "tests/unit/test_query_planner_disambiguation.py",
         "publication": "approved",
         "sha256": "14cc4e74c56e698ad0884a6df89e607dd1f091187586c4b80722296e76932f55"
@@ -5002,6 +5108,86 @@
         "path": "tests/unit/test_row_to_state_converter.py",
         "publication": "approved",
         "sha256": "f294fe8d5c6b205cd41f46a97bdd4b7556c8911065411f8a98c817b51ea4492a"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s100_cited_definition.py",
+        "publication": "approved",
+        "sha256": "8550df13a9c347c39fd1e41a9ae742af669810e5bffbbf6545a1fca756b099b1"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s100_redirect_readability.py",
+        "publication": "approved",
+        "sha256": "a174bc7227df1e272bc95b581caf2832e83379c2e64074412e226a915b5a6af4"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s100_reference_entries.py",
+        "publication": "approved",
+        "sha256": "2539fa7dae6fa3fedca66008bc95e922f216cf4cae7465d567859ef11f0749d6"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s101_reader_numbers.py",
+        "publication": "approved",
+        "sha256": "5ce1a020284be3dc7514cfe161dfed95d1f0e6e4d0f152231f357e8db21a7bce"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s101_source_named_dead.py",
+        "publication": "approved",
+        "sha256": "7203bd3182a7cb3b166f7e05c1835cafe71e04e3b068981eff8b835b1d8f58bb"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s102_quote_matching.py",
+        "publication": "approved",
+        "sha256": "18affd6b746f7143c267797593c6bb74f3db836dbab8d1fd837d97efa3c89868"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s102_references_entry_citations.py",
+        "publication": "approved",
+        "sha256": "b9b368029f22e65f13fb56b7a387cc2a5c068790cdbeac06dffcd0ab29abaec6"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s102_verdict_provenance.py",
+        "publication": "approved",
+        "sha256": "15f46d12b87cad1eb7ba3c48b8e737dfd33727b0591dabd8e1a67d0be7020648"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s103_cited_passages.py",
+        "publication": "approved",
+        "sha256": "79d281988c4ac8deb31bc498f8bcb6b51b5d0e79f1e16fe4237b644d48ab2e0c"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s103_superscript_style.py",
+        "publication": "approved",
+        "sha256": "da443e0bcdf1cb0960c857e944ac8bd8c7dfc4c0e9d8987094484239ef755e64"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -5185,7 +5371,7 @@
         "mode": 420,
         "path": "tests/unit/test_s82_m05_invariants.py",
         "publication": "approved",
-        "sha256": "5f52b1462a76f38e5c0939eba0f568bfecc4bbbfc10c3b24aad41d1e49544c87"
+        "sha256": "0b708dc947bdbb4211fc1b8147110685135464ce81f075aab7c9045bb9737ae3"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -5297,7 +5483,7 @@
         "mode": 420,
         "path": "tests/unit/test_s87_m04_invariants.py",
         "publication": "approved",
-        "sha256": "ab977fa156c47d6887e5b4ae2b9cacba3ef99d25437b06f64c2b18a7a0b8820b"
+        "sha256": "1bf06120c881a352fe20964d266412d700018cbaae1e22e8067ec5a4ea9a23d8"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -5417,7 +5603,7 @@
         "mode": 420,
         "path": "tests/unit/test_s93_citation_surface.py",
         "publication": "approved",
-        "sha256": "aedc402b10dca7295ad1e68575624a08c634693f51136d56f89d30ebc249f6b4"
+        "sha256": "f9051a47d766eda38530e7cef32ed92ef9753f964f84f3660f51a11189ccad35"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -5433,7 +5619,7 @@
         "mode": 420,
         "path": "tests/unit/test_s93_coverage.py",
         "publication": "approved",
-        "sha256": "8c9cb705c79a8dc21b87c369485674ba3adfb40987f719cb7563027701914943"
+        "sha256": "69bf910f185938380bd8ef751ca10bbaf1898b425f347b46d10af03cacfc3a48"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -5505,7 +5691,7 @@
         "mode": 420,
         "path": "tests/unit/test_s96_quality_signals.py",
         "publication": "approved",
-        "sha256": "7d8d9b594b108f212ae0cbd8363659e610b1bf9988f33fed8ff202773e1b4cd2"
+        "sha256": "1b1e49d945966202f66c834215a02085550852ddd8d38d215e60119c28ef3d30"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -5554,6 +5740,54 @@
         "path": "tests/unit/test_s97_record_folder_guard.py",
         "publication": "approved",
         "sha256": "1ac9d2a71a135b603fbf3d928b3e204ab72f29eeaea5bbe9c5292c51f43c41f7"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s98_arxiv_identity.py",
+        "publication": "approved",
+        "sha256": "861bc6461e9636cdfcbb9453dbd401f497906f3601f33b084cb76ad8dc2b217f"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s98_deliverable_headings.py",
+        "publication": "approved",
+        "sha256": "9a74e428705e7c910baf988c6cdca8ddf4c1930720ed8207f52550d662d4b010"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s98_redirect_identity.py",
+        "publication": "approved",
+        "sha256": "c9dc195807cb8fafe148febf832768751bffbfabd132dd4ede4fc3b6d2bd222f"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s98_reference_url_parentheses.py",
+        "publication": "approved",
+        "sha256": "a6fb589b369cc5b3eff43d2975e6edddc285fa10e2898539800368816c92acea"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s98_source_list_references.py",
+        "publication": "approved",
+        "sha256": "8af470a4f0a2742663f033b6d59e9a4ff8f2f0a264484ceb0d9bf0cffc0f0bb0"
+      },
+      {
+        "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
+        "license": "MIT",
+        "mode": 420,
+        "path": "tests/unit/test_s99_heading_remedies.py",
+        "publication": "approved",
+        "sha256": "195f8e74d2726dc48e92295493975fa687920951f00c38e455652062703ce4e5"
       },
       {
         "basis": "First-party deterministic test or explicit opt-in live boundary; retained real/private evidence cases are excluded and separately counted.",
@@ -5705,6 +5939,6 @@
     "scope_decision": "Operator approved three vendor replays and real-evidence regressions remaining private; existing independent deterministic coverage remains public. File review applies only to these exact hashes. Public creation/push still requires separate authorization.",
     "status": "approved"
   },
-  "source_commit": "df930a030226b4ffc60e8d5e8565885082819992",
-  "source_tree": "99d8bd06566453154e032525491ff30900a79bc6"
+  "source_commit": "3ea5c5cac455592c0eec8cbf876cbcbf38653b84",
+  "source_tree": "0cde10eac89761ea07c5e23294b8563181674655"
 }

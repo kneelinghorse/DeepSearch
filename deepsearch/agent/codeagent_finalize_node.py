@@ -29,7 +29,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import AbstractSet, Any, Dict, List, Mapping, Sequence, Tuple
+from typing import AbstractSet, Any, Dict, List, Mapping, NamedTuple, Sequence, Tuple
 from urllib.parse import urlparse
 
 from deepsearch.error_safety import (
@@ -57,6 +57,7 @@ from deepsearch.report.protocol import (
     canonicalize_protocol_payload,
     generate_mission_protocol,
 )
+from deepsearch.report.scope_validation import _WHITESPACE as _REPORT_WHITESPACE
 from deepsearch.report.scope_validation import (
     count_report_words,
     measured_text,
@@ -65,22 +66,31 @@ from deepsearch.report.scope_validation import (
 from deepsearch.report.text import canonicalize_report_text
 
 from .citation_extraction import (
+    _CITE_MARKER_RE,
+    _SENTENCE_TERMINATORS,
     _UNICODE_SUPER_MARKER_RE,
     _UNICODE_SUPER_REFERENCE_ENTRY_RE,
+    _build_references_map,
+    _find_code_spans,
+    _is_inside_span,
+    _source_identity,
     _super_to_int,
     extract_citations,
+    reads_superscripts,
 )
 from .citation_liveness import (
     CLASSIFICATION_DEAD,
+    CLASSIFICATION_DEAD_UNCOLLECTED,
     LivenessTelemetry,
     _normalise_url_for_cache,
     build_source_url_set,
     check_citations_liveness,
     classify_citation,
     quarantine_dead_citations,
+    source_named_dead_urls,
     strip_dead_cite_markers,
 )
-from .citation_surface import reader_markers
+from .citation_surface import reader_markers, superscript_runs_ignored
 from .codeagent_runner import (
     DEFAULT_MAX_STEPS,
     LEDGER_RECORD_MAX_ENTRIES,
@@ -486,6 +496,9 @@ class _ValidationPass:
     critique_result: CritiqueResult
     critique_outer_error: str | None
     telemetry: Dict[str, Any]
+    # S103 m02: whether the draft reads superscripts as reader markers, decided
+    # once on the text extraction read and carried to every later audit.
+    superscripts: bool
 
 
 def _canonicalize_synthesis_sources(
@@ -669,13 +682,20 @@ async def _run_validation_pass(
     # assigns absolute codepoint coordinates. Every later persistence seam is
     # strict and may not move those coordinates silently.
     draft_markdown = canonicalize_report_text(draft_markdown)
-    pass_telemetry: Dict[str, Any] = {}
+    # S101 m02: a kept inline citation shows the reader number its References
+    # entry gives it. Every coordinate, hash and audit below reads this draft.
+    draft_markdown, reader_number_rendering, rendered_markers = _render_reader_numbers(
+        draft_markdown
+    )
+    pass_telemetry: Dict[str, Any] = {"reader_number_rendering": reader_number_rendering}
     if scope_admission is not None:
         sources_collected = scope_admission.filter_sources(sources_collected, "pre_critique")
+    superscripts = reads_superscripts(draft_markdown)
     stripped_markdown, citations = _extract_and_resolve_citations(
         draft_markdown,
         sources_collected=sources_collected,
         synthesis_telemetry=pass_telemetry,
+        rendered_markers=rendered_markers,
     )
     citations, liveness = await _run_liveness_check(
         mission_id=mission_id,
@@ -732,6 +752,7 @@ async def _run_validation_pass(
         critique_result=critique_result,
         critique_outer_error=outer_error,
         telemetry=pass_telemetry,
+        superscripts=superscripts,
     )
 
 
@@ -1797,6 +1818,9 @@ async def codeagent_finalize_node(state: AgentState) -> StateUpdate:
     stripped_markdown = selected_pass.stripped_markdown
     final_markdown = selected_pass.final_markdown
     citation_annotations = selected_pass.citations
+    # The audits below read texts with no [cite:URL] marker left, so they never
+    # decide the reading again (S103 m02).
+    superscripts = selected_pass.superscripts
     critique_result = selected_pass.critique_result
     if not selected_pass.telemetry.get("critique_skipped"):
         logger.info(
@@ -1842,18 +1866,30 @@ async def codeagent_finalize_node(state: AgentState) -> StateUpdate:
     # (PD7 10-field shape pinned), and nested inside the already-declared
     # synthesis_telemetry channel (no new node-return key).
     _quarantine_source_set = build_source_url_set(synthesis_result.sources_collected)
+    # S101 m03: a dead link a collected body names is dead, not fabricated; it
+    # is downgraded and flagged unverified like any dead citation.
+    _source_named = source_named_dead_urls(
+        citation_annotations, synthesis_result.sources_collected
+    )
+    _classes = [
+        classify_citation(
+            live=ann.live,
+            url=ann.url,
+            source_url_set=_quarantine_source_set,
+            source_named_urls=_source_named,
+        )
+        for ann in citation_annotations
+    ]
     downgraded_dead = [
         ann
-        for ann in citation_annotations
-        if classify_citation(
-            live=ann.live, url=ann.url, source_url_set=_quarantine_source_set
-        )
-        == CLASSIFICATION_DEAD
+        for ann, cls in zip(citation_annotations, _classes)
+        if cls in (CLASSIFICATION_DEAD, CLASSIFICATION_DEAD_UNCOLLECTED)
     ]
     dead_quarantined = len(downgraded_dead)
     hallucinated_quarantined = len(quarantined_dead)
     synthesis_telemetry["markers_quarantined"] = dead_quarantined
     synthesis_telemetry["hallucinated_quarantined"] = hallucinated_quarantined
+    synthesis_telemetry["source_named_dead"] = _classes.count(CLASSIFICATION_DEAD_UNCOLLECTED)
     if quarantined_dead or downgraded_dead:
         logger.info(
             "CodeAgent finalize: citation post-processing for %s "
@@ -1876,6 +1912,7 @@ async def codeagent_finalize_node(state: AgentState) -> StateUpdate:
         quarantined=quarantined_dead,
         citation_reference_markdown=stripped_markdown,
         require_number_mapping=True,
+        superscripts=superscripts,
     )
     unavailable = scope_admission.snapshot()["unavailable"]
     if bounded_scope and unavailable:
@@ -2148,6 +2185,9 @@ async def codeagent_finalize_node(state: AgentState) -> StateUpdate:
         )
         synthesis_telemetry["citation_telemetry"] = citation_telemetry
 
+        _final_source_named = source_named_dead_urls(
+            citation_annotations, synthesis_result.sources_collected
+        )
         final_downgraded_dead = [
             annotation
             for annotation in citation_annotations
@@ -2155,8 +2195,9 @@ async def codeagent_finalize_node(state: AgentState) -> StateUpdate:
                 live=annotation.live,
                 url=annotation.url,
                 source_url_set=_quarantine_source_set,
+                source_named_urls=_final_source_named,
             )
-            == CLASSIFICATION_DEAD
+            in (CLASSIFICATION_DEAD, CLASSIFICATION_DEAD_UNCOLLECTED)
         ]
         # The earlier pass can annotate the References surface, but only the
         # post-rebase annotations are eligible for protocol persistence. Audit
@@ -2178,6 +2219,7 @@ async def codeagent_finalize_node(state: AgentState) -> StateUpdate:
                 # rendered, so carry that result into this final byte-exact
                 # surface audit instead of applying stale coordinates.
                 audit_quarantined_mapping=False,
+                superscripts=superscripts,
             )
         )
         final_citation_consistency["quarantined_mapping_checked"] = bool(
@@ -2192,6 +2234,39 @@ async def codeagent_finalize_node(state: AgentState) -> StateUpdate:
         ):
             final_citation_consistency["consistent"] = False
         synthesis_telemetry["citation_consistency"] = final_citation_consistency
+        # S101 m02: where each citation whose reader number was rendered ended
+        # up. Copied, so the recovery pass record keeps its per-pass counts.
+        # Diagnostic only: a failure is recorded and never costs the report.
+        reader_number_rendering = synthesis_telemetry.get("reader_number_rendering")
+        if isinstance(reader_number_rendering, Mapping):
+            fates: Dict[str, int] | None
+            try:
+                fates = _reader_number_fates(
+                    kept=original_annotations,
+                    persisted=citation_annotations,
+                    dropped=dropped_annotations,
+                    quarantined=quarantined_dead,
+                    applied_edit_spans=critique_result.applied_edit_spans,
+                    critique_input=stripped_markdown,
+                    report_content=report_content,
+                    expected_urls={
+                        _reference_url_identity(annotation.url)
+                        for annotation in [*citation_annotations, *quarantined_dead]
+                    },
+                    superscripts=superscripts,
+                )
+            except Exception as exc:  # noqa: BLE001 — telemetry must never cost the report
+                logger.error(
+                    "CodeAgent finalize: reader-number fates failed for %s: %s",
+                    mission_id,
+                    safe_exception_text(exc, category="internal"),
+                )
+                fates = None
+            synthesis_telemetry["reader_number_rendering"] = {
+                **reader_number_rendering,
+                "fates": fates,
+                **({"fates_error": True} if fates is None else {}),
+            }
         synthesis_telemetry["evidence_dependencies"] = build_evidence_dependencies(
             [annotation.url for annotation in citation_annotations],
             synthesis_result.sources_collected or [],
@@ -2402,17 +2477,25 @@ def _extract_and_resolve_citations(
     *,
     sources_collected: list[dict[str, Any]] | None,
     synthesis_telemetry: Dict[str, Any],
+    rendered_markers: Mapping[tuple[int, str], int] | None = None,
 ) -> tuple[str, List[CitationAnnotation]]:
     """Strip ``[cite:URL]`` markers, resolve titles, and write telemetry.
 
     Single callsite for the extractor in the success path. Always populates
     ``synthesis_telemetry["citation_telemetry"]`` so downstream consumers
-    don't have to branch on missing-vs-empty.
+    don't have to branch on missing-vs-empty. ``rendered_markers`` flags each
+    primary citation whose own marker received a rendered reader number.
     """
 
     citation_t0 = time.monotonic()
     reconciliation: dict[str, Any] = {}
     stripped_markdown, annotations = extract_citations(final_markdown, telemetry=reconciliation)
+    for annotation in annotations:
+        annotation._cited_url = annotation.url
+        if annotation._extraction_mode == "primary":
+            annotation._reader_number_rendered = (rendered_markers or {}).get(
+                (annotation.end_index, annotation.url)
+            )
     annotations, url_projection = _canonicalize_citation_urls(annotations)
     citation_runtime = round(time.monotonic() - citation_t0, 3)
 
@@ -2888,6 +2971,516 @@ def _clean_ref_url(
     return candidates[-1]
 
 
+class _ReferencesEntries(NamedTuple):
+    """The References audit's parse of one report's References section.
+
+    ``lines`` is the text after the heading split on newlines; the first
+    ``section_lines`` belong to the section. ``line_urls`` maps each section
+    line carrying a URL to that line's URL identities, and ``line_numbers``
+    maps each numbered one to its reference number.
+    """
+
+    heading_start: int
+    section_start: int
+    section_end: int
+    lines: list[str]
+    section_lines: int
+    line_urls: dict[int, set[str]]
+    refs_urls: set[str]
+    numbered_urls: dict[int, set[str]]
+    number_collisions: set[int]
+    unsupported_reference_rows: int
+    line_numbers: dict[int, int]
+
+
+def _parse_references_entries(
+    markdown: str,
+    *,
+    expected_urls: AbstractSet[str],
+) -> _ReferencesEntries | None:
+    """Parse the References section as the audit reads it; ``None`` without one.
+
+    S101 m02 lifts this out of the audit unchanged, so reader-number rendering
+    decides on exactly the entries the audit maps against.
+    """
+
+    heading_match = _REFERENCES_HEADING_RE.search(markdown or "")
+    if not heading_match:
+        return None
+    section_start = heading_match.end()
+    lines = (markdown[section_start:]).split("\n")
+    reference_heading_level = len(heading_match.group(1))
+
+    def _section_end() -> int:
+        for line_index, candidate_line in enumerate(lines):
+            nested_heading = _HEADING_LEVEL_RE.match(candidate_line)
+            if (
+                nested_heading
+                and len(nested_heading.group(1)) <= reference_heading_level
+            ):
+                return line_index
+        return len(lines)
+
+    # A nested heading such as ``### Annotated Source List`` belongs to an
+    # H2 References section. The old any-heading stop made R2 report 0/30
+    # even though all numbered URL rows followed that nested heading.
+    section_lines = _section_end()
+    line_urls: dict[int, set[str]] = {}
+    line_numbers: dict[int, int] = {}
+    refs_urls: set[str] = set()
+    numbered_urls: dict[int, set[str]] = {}
+    numbered_sources: dict[int, set[str]] = {}
+    number_collisions: set[int] = set()
+    unsupported_reference_rows = 0
+    section_end = min(len(markdown), section_start + sum(
+        len(line) + 1 for line in lines[:section_lines]
+    ))
+    for i, line in enumerate(lines[:section_lines]):
+        found = _URL_IN_LINE_RE.findall(line)
+        if not found:
+            continue
+        line_urls[i] = {
+            _reference_url_identity(_clean_ref_url(u, expected_urls=expected_urls))
+            for u in found
+        }
+        refs_urls |= line_urls[i]
+        numbered_match = _NUMBERED_REFERENCE_PREFIX_RE.match(line)
+        reference_number: int | None = None
+        if numbered_match:
+            reference_number = int(numbered_match.group(1) or numbered_match.group(2))
+        else:
+            superscript_match = _UNICODE_SUPER_REFERENCE_ENTRY_RE.match(line)
+            if superscript_match:
+                reference_number = _super_to_int(superscript_match.group(1))
+        if reference_number is None and re.match(r"^\s*(?:\*\*)?\(?\d+", line):
+            unsupported_reference_rows += 1
+        if reference_number is not None:
+            line_numbers[i] = reference_number
+            # S100 m02: links naming one source (an arXiv abstract and its
+            # HTML page) are one entry, as in the extractor. numbered_urls
+            # keeps every link, so the body mapping accepts either form.
+            line_sources = {_source_identity(url) for url in line_urls[i]}
+            prior = numbered_sources.setdefault(reference_number, line_sources)
+            if len(line_sources) != 1 or prior != line_sources:
+                number_collisions.add(reference_number)
+            numbered_urls.setdefault(reference_number, set()).update(line_urls[i])
+    return _ReferencesEntries(
+        heading_start=heading_match.start(),
+        section_start=section_start,
+        section_end=section_end,
+        lines=lines,
+        section_lines=section_lines,
+        line_urls=line_urls,
+        refs_urls=refs_urls,
+        numbered_urls=numbered_urls,
+        number_collisions=number_collisions,
+        unsupported_reference_rows=unsupported_reference_rows,
+        line_numbers=line_numbers,
+    )
+
+
+def _boundary_numbers(
+    reference_text: str,
+    annotation: CitationAnnotation,
+    *,
+    superscripts: bool,
+    numbered_fallback: bool = False,
+) -> set[int]:
+    """The reader numbers the References audit binds to one citation's boundary.
+
+    S101 m02 lifts this out of the audit unchanged, so rendering and mapping
+    read a citation's reader number the same way. S103 m02 reads superscripts
+    only when ``superscripts`` says the report cites that way, and matches each
+    run in the full text, so the character before it decides an exponent.
+    """
+
+    start = max(
+        0, min(len(reference_text), int(annotation.start_index))
+    )
+    end = max(
+        start, min(len(reference_text), int(annotation.end_index))
+    )
+    span_numbers: set[int] = set()
+    span_text = reference_text[start:end]
+    # Primary [cite:URL] extraction trims the space before the
+    # machine marker, leaving the human-readable number at the
+    # end of the persisted citation span. Inspect that owned
+    # marker before the suffix: in ``[1][cite:A][2][cite:B]``,
+    # A's persisted span ends at [1] while its suffix starts at
+    # B's [2]. Suffix-first inspection falsely binds A to [2].
+    trailing_match = _TRAILING_NUMBERED_MARKERS_RE.search(
+        span_text
+    )
+    if trailing_match:
+        span_numbers.update(
+            int(match)
+            for match in _NUMBERED_BODY_MARKER_RE.findall(
+                trailing_match.group(1)
+            )
+        )
+    # A primary claim may cite multiple sources as ``claim¹ ²``;
+    # every trailing whitespace-separated superscript marker is
+    # adjacent to the shared machine-citation coordinate.
+    superscript_matches = list(
+        _UNICODE_SUPER_MARKER_RE.finditer(reference_text, start, end)
+    ) if superscripts else []
+    trailing_start = end
+    for match in reversed(superscript_matches):
+        if reference_text[match.end() : trailing_start].strip():
+            break
+        number = _super_to_int(match.group(1))
+        if number is not None:
+            span_numbers.add(number)
+        trailing_start = match.start()
+    # Numbered-fallback annotations end immediately before their
+    # own reader marker. When several markers are adjacent, only
+    # the first leading marker belongs to this coordinate; later
+    # ones belong to later annotations.
+    suffix_numbers: set[int] = set()
+    suffix_text = reference_text[end : end + 128]
+    suffix_match = _LEADING_NUMBERED_MARKERS_RE.match(suffix_text)
+    if suffix_match:
+        first_number = _NUMBERED_BODY_MARKER_RE.search(
+            suffix_match.group(1)
+        )
+        if first_number:
+            suffix_numbers.add(int(first_number.group(1)))
+    leading_offset = len(suffix_text) - len(suffix_text.lstrip())
+    superscript_match = _UNICODE_SUPER_MARKER_RE.match(
+        reference_text, end + leading_offset, end + len(suffix_text)
+    ) if superscripts else None
+    if superscript_match:
+        number = _super_to_int(superscript_match.group(1))
+        if number is not None:
+            suffix_numbers.add(number)
+
+    # Primary and numbered-fallback extraction can emit the same
+    # coordinate shape with opposite ownership. Primary A in
+    # ``[1][cite:A][2][cite:B]`` owns trailing [1]; fallback B in
+    # ``[1][2]`` owns suffix [2]. Extraction mode is therefore
+    # required to choose precedence without regressing either.
+    owns_suffix = annotation._extraction_mode == "numbered" or (
+        annotation._extraction_mode is None and numbered_fallback
+    )
+    if not owns_suffix and span_numbers:
+        return span_numbers
+    if suffix_numbers:
+        return suffix_numbers
+    return span_numbers
+
+
+# S101 m02 — reader numbers for kept inline citations.
+READER_NUMBER_RENDERING_VERSION = 1
+_READER_NUMBER_SKIPS = (
+    "skipped_not_in_references",
+    "skipped_multiple_numbers",
+    "skipped_conflicting_number",
+    "skipped_link_syntax",
+    "skipped_parser_disagreement",
+    "skipped_sentence_boundary",
+    "skipped_line_start",
+)
+_READER_NUMBER_FATES = (
+    "mapped", "unmapped", "quarantined", "lost_with_critique_edit", "lost_at_rebase",
+)
+
+
+# A line start holding only Markdown block syntax: heading, quote, bullet and
+# ordered-list markers, and task boxes.
+_BLOCK_PREFIX_RE = re.compile(r"(?:\s*(?:#{1,6}|>+|[-*+]|\d{1,9}[.)]|\[[ xX]\]))*\s*")
+# A token a GFM autolink would extend over a number glued to its end.
+_BARE_LINK_RE = re.compile(r"[(*_~]*(?:https?://|www\.)", re.IGNORECASE)
+
+
+def _is_report_whitespace(char: str) -> bool:
+    """Whether ``count_report_words`` splits on ``char``."""
+
+    return bool(_REPORT_WHITESPACE.fullmatch(char))
+
+
+def _is_line_break(char: str) -> bool:
+    """Report whitespace that ends a line, as ``str.splitlines`` reads it."""
+
+    return _is_report_whitespace(char) and len(f"a{char}b".splitlines()) == 2
+
+
+def _is_spacing(char: str) -> bool:
+    return _is_report_whitespace(char) and not _is_line_break(char)
+
+
+def _render_reader_numbers(
+    draft: str,
+) -> tuple[str, Dict[str, Any], Dict[tuple[int, str], int]]:
+    """Render the reader number a kept inline citation lacks (S101 m02).
+
+    A ``[cite:URL]`` marker whose citation has no reader number at its boundary
+    gets ``[N]`` immediately before it when the References audit lists the URL
+    under exactly one number N, N is no collision, the extractor resolves N to
+    the URL it deduplicates against this marker, and the marker's group is not
+    followed by ``(``. A number the agent wrote is never changed and no
+    References entry is added. The stripped draft keeps its word count: the
+    spacing inside a rendered group is removed, and a group followed by
+    whitespace is glued to the last visible character, unless that character
+    ends a sentence or the group starts a line, where the group is skipped.
+
+    Never a gate: on any error the draft comes back unchanged with ``error``
+    set. Returns the draft, the pass telemetry, and each rendered marker's
+    ``(end_index, URL)`` in the rendered draft's extraction with its number.
+    """
+
+    telemetry: Dict[str, Any] = {
+        "version": READER_NUMBER_RENDERING_VERSION,
+        "rendered": 0,
+        **dict.fromkeys(_READER_NUMBER_SKIPS, 0),
+        "words_before": 0,
+        "words_after": 0,
+        "draft_chars_before": len(draft),
+        "draft_chars_after": len(draft),
+        "error": False,
+    }
+    try:
+        rendered, keys = _place_reader_numbers(draft, telemetry)
+    except Exception as exc:  # noqa: BLE001 — rendering must never cost the report
+        logger.error(
+            "reader-number rendering failed: %s — keeping the draft unchanged",
+            safe_exception_text(exc, category="internal"),
+        )
+        telemetry.update(dict.fromkeys(("rendered", *_READER_NUMBER_SKIPS), 0))
+        telemetry.update(
+            words_after=telemetry["words_before"], draft_chars_after=len(draft), error=True,
+        )
+        return draft, telemetry, {}
+    telemetry["rendered"] = len(keys)
+    telemetry["draft_chars_after"] = len(rendered)
+    return rendered, telemetry, keys
+
+
+def _place_reader_numbers(
+    draft: str, telemetry: Dict[str, Any],
+) -> tuple[str, Dict[tuple[int, str], int]]:
+    code_spans = _find_code_spans(draft)
+    markers = [m for m in _CITE_MARKER_RE.finditer(draft)
+               if not _is_inside_span(m.start(), code_spans)]
+    if not markers:
+        # Nothing to render, and extraction would strip nothing.
+        telemetry["words_before"] = telemetry["words_after"] = count_report_words(draft)
+        return draft, {}
+    stripped, annotations = extract_citations(draft)
+    # The marked draft decides as the validation pass's extraction does: it has
+    # a [cite:URL] marker, so only its labels can switch superscripts on.
+    superscripts = reads_superscripts(draft)
+    telemetry["words_before"] = telemetry["words_after"] = count_report_words(stripped)
+    entries = _parse_references_entries(
+        stripped, expected_urls={_reference_url_identity(a.url) for a in annotations},
+    )
+    # Without a References section no URL is listed under any number.
+    numbered = entries.numbered_urls if entries else {}
+    collisions = entries.number_collisions if entries else set()
+    section = (entries.heading_start, entries.section_end) if entries else (len(stripped),) * 2
+    listed: dict[str, set[int]] = {}
+    for number, urls in numbered.items():
+        for url in urls:
+            listed.setdefault(url, set()).add(number)
+    merged: set[int] = set()
+    resolved, _ = _build_references_map(stripped, merged=merged)
+    primary = {(a.end_index, a.url): a for a in annotations if a._extraction_mode == "primary"}
+
+    numbers: list[int | None] = []
+    positions: list[int] = []
+    decided: set[int] = set()
+    removed = 0
+    for marker in markers:
+        position = marker.start() - removed
+        removed += marker.end() - marker.start()
+        numbers.append(None)
+        positions.append(position)
+        url = marker.group(1)
+        if section[0] <= position < section[1] or position == section[1] == len(stripped):
+            continue  # the References section is never rendered
+        try:
+            _canonical_ledger_url(url)
+        except (TypeError, ValueError):
+            continue  # an unsafe URL never reaches the protocol
+        end = position
+        while end > 0 and stripped[end - 1].isspace():
+            end -= 1
+        citation = primary.get((end, url))
+        if citation is None or id(citation) in decided:
+            # A repeat: the extractor keeps one citation per claim and URL,
+            # decided at its first marker.
+            continue
+        decided.add(id(citation))
+        identity = _reference_url_identity(url)
+        boundary = _boundary_numbers(stripped, citation, superscripts=superscripts)
+        candidates = listed.get(identity, set())
+        if boundary:
+            if not any(identity in numbered.get(n, set()) for n in boundary):
+                telemetry["skipped_conflicting_number"] += 1
+            continue
+        if not candidates:
+            telemetry["skipped_not_in_references"] += 1
+            continue
+        if len(candidates) > 1:
+            telemetry["skipped_multiple_numbers"] += 1
+            continue
+        (number,) = candidates
+        target = resolved.get(number)
+        if number in collisions or target is None or not (
+            target == url
+            or (number in merged and _source_identity(target) == _source_identity(url))
+        ):
+            telemetry["skipped_parser_disagreement"] += 1
+        else:
+            numbers[-1] = number
+
+    # A group is a run of markers separated by nothing or only by spacing.
+    groups: list[tuple[int, int]] = []
+    first = 0
+    for index in range(1, len(markers) + 1):
+        if index == len(markers) or not all(
+            _is_spacing(char) for char in draft[markers[index - 1].end():markers[index].start()]
+        ):
+            groups.append((first, index - 1))
+            first = index
+    rendered = draft
+    for first, last in reversed(groups):
+        members = range(first, last + 1)
+        if all(numbers[k] is None for k in members):
+            continue
+        group_end = markers[last].end()
+        after = draft[group_end:group_end + 1]
+        start = markers[first].start()
+        visible = start
+        while visible > 0 and _is_report_whitespace(draft[visible - 1]):
+            visible -= 1
+        line_start = positions[first]
+        while line_start > 0 and not _is_line_break(stripped[line_start - 1]):
+            line_start -= 1
+        line_prefix = stripped[line_start:positions[first]]
+        skip = None
+        if after == "(":
+            skip = "skipped_link_syntax"
+        elif _BLOCK_PREFIX_RE.fullmatch(line_prefix):
+            # Nothing but block syntax precedes the group on its line. A number
+            # there could hide a sentence end from the span finder, or turn a
+            # list item, heading or quote into prose.
+            skip = "skipped_line_start"
+        elif not after or _is_report_whitespace(after):
+            # Glue to the last visible character so no word is added, unless
+            # that would hide a sentence end from the span finder.
+            if draft[visible - 1] in _SENTENCE_TERMINATORS:
+                skip = "skipped_sentence_boundary"
+            else:
+                start = visible
+        lead = ""
+        if skip is None and start > 0 and not _is_report_whitespace(draft[start - 1]):
+            if after and not _is_report_whitespace(after):
+                # Followed by text with no whitespace before it, the group's
+                # inner spacing alone kept the claim apart from that text: it
+                # moves in front of the numbers instead of being removed.
+                lead = "".join(draft[markers[k].end():markers[k + 1].start()]
+                               for k in range(first, last))
+            if not lead:
+                # The first number joins the visible token before the group.
+                token = line_prefix.split()[-1]
+                if _BARE_LINK_RE.match(token):
+                    skip = "skipped_link_syntax"  # an autolink would swallow it
+                elif (len(token) - len(token.rstrip("\\"))) % 2:
+                    skip = "skipped_parser_disagreement"  # an escaped [N] is no number
+        if skip:
+            for k in members:
+                if numbers[k] is not None:
+                    telemetry[skip] += 1
+                    numbers[k] = None
+            continue
+        group = lead + "".join(
+            (f"[{numbers[k]}]" if numbers[k] is not None else "") + markers[k].group(0)
+            for k in members
+        )
+        rendered = rendered[:start] + group + rendered[group_end:]
+
+    keys: Dict[tuple[int, str], int] = {}
+    parts: list[str] = []
+    cursor = removed = 0
+    rendered_spans = _find_code_spans(rendered)
+    rendered_markers = [m for m in _CITE_MARKER_RE.finditer(rendered)
+                        if not _is_inside_span(m.start(), rendered_spans)]
+    if len(rendered_markers) != len(markers):
+        raise ValueError("reader-number rendering changed the inline markers")
+    for assigned, marker in zip(numbers, rendered_markers):
+        parts.append(rendered[cursor:marker.start()])
+        cursor = marker.end()
+        if assigned is not None:
+            keys[(marker.start() - removed, marker.group(1))] = assigned
+        removed += marker.end() - marker.start()
+    parts.append(rendered[cursor:])
+    words_after = count_report_words("".join(parts))
+    if words_after != telemetry["words_before"]:
+        raise ValueError(
+            f"reader-number rendering changed the word count "
+            f"({telemetry['words_before']} -> {words_after})"
+        )
+    return rendered, keys
+
+
+def _reader_number_fates(
+    *,
+    kept: Sequence[CitationAnnotation],
+    persisted: Sequence[CitationAnnotation],
+    dropped: Sequence[Mapping[str, Any]],
+    quarantined: Sequence[CitationAnnotation],
+    applied_edit_spans: Sequence[tuple[int, int]],
+    critique_input: str,
+    report_content: str,
+    expected_urls: AbstractSet[str],
+    superscripts: bool | None = None,
+) -> Dict[str, int]:
+    """Where each citation whose reader number was rendered ended up (S101 m02).
+
+    ``kept`` indexes ``dropped`` and holds coordinates in ``critique_input``,
+    as the applied edit spans do; ``persisted`` holds the rebased survivors.
+    The rebase binds cited text in document order, so a loss belongs to the
+    critique whenever an applied edit removed any occurrence of that text.
+    Finalize passes the selected pass's superscript reading; without one it is
+    decided on ``report_content`` (S103 m02).
+    """
+
+    if superscripts is None:
+        superscripts = reads_superscripts(report_content)
+    fates: Counter[str] = Counter()
+    fates["quarantined"] = sum(a._reader_number_rendered is not None for a in quarantined)
+
+    def _edited(start: int, end: int) -> bool:
+        return any(start < edit_end and edit_start < end
+                   for edit_start, edit_end in applied_edit_spans)
+
+    for record in dropped:
+        annotation = kept[int(record["annotation_index"])]
+        if annotation._reader_number_rendered is None:
+            continue
+        spans = [(annotation.start_index, annotation.end_index)]
+        cited = critique_input[annotation.start_index:annotation.end_index].strip()
+        found = critique_input.find(cited) if cited else -1
+        while found != -1:
+            spans.append((found, found + len(cited)))
+            found = critique_input.find(cited, found + 1)
+        edited = any(_edited(start, end) for start, end in spans)
+        fates["lost_with_critique_edit" if edited else "lost_at_rebase"] += 1
+    rendered_survivors = [a for a in persisted if a._reader_number_rendered is not None]
+    entries = _parse_references_entries(
+        report_content, expected_urls=expected_urls,
+    ) if rendered_survivors else None
+    numbered = entries.numbered_urls if entries else {}
+    for annotation in rendered_survivors:
+        number = annotation._reader_number_rendered
+        mapped = number in _boundary_numbers(
+            report_content, annotation, superscripts=superscripts) and (
+            _reference_url_identity(annotation.url) in numbered.get(number, set())
+        )
+        fates["mapped" if mapped else "unmapped"] += 1
+    return {fate: fates[fate] for fate in _READER_NUMBER_FATES}
+
+
 def _annotate_references_and_check_consistency(
     markdown: str,
     *,
@@ -2899,6 +3492,7 @@ def _annotate_references_and_check_consistency(
     annotate_flags: bool = True,
     audit_quarantined_mapping: bool = True,
     numbered_fallback: bool = False,
+    superscripts: bool | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """S84 m02 post-processing consistency pass.
 
@@ -2912,7 +3506,9 @@ def _annotate_references_and_check_consistency(
     hard quarantine, which the withdrawn flag makes visible instead of
     silent. S92 m07 understands nested subsections and can verify the exact
     body ``[N]`` -> References URL mapping against persisted annotations.
-    Missing mappings are reported, never guessed. Never raises.
+    Missing mappings are reported, never guessed. Never raises. S103 m02:
+    finalize passes the reading of superscripts it decided on the extracted
+    draft; without one it is decided on ``markdown``.
     """
 
     kept_urls = {_reference_url_identity(a.url) for a in kept_annotations}
@@ -2946,13 +3542,23 @@ def _annotate_references_and_check_consistency(
         "unsupported_reference_rows": 0,
         "annotation_coordinate_drift": 0,
         "annotations_without_reader_marker": 0,
+        "references_entry_citations": 0,
+        "references_entry_unmapped": 0,
+        "superscripts_read": bool(superscripts),
+        "superscript_runs_ignored": 0,
         "consistent": True,
     }
 
     try:
-        heading_match = _REFERENCES_HEADING_RE.search(markdown or "")
-        if not heading_match:
-            numbers = reader_markers(markdown) if require_number_mapping else []
+        if superscripts is None:
+            superscripts = reads_superscripts(markdown)
+            consistency["superscripts_read"] = superscripts
+        entries = _parse_references_entries(markdown, expected_urls=expected_urls)
+        if entries is None:
+            numbers = reader_markers(
+                markdown, superscripts=superscripts) if require_number_mapping else []
+            consistency["superscript_runs_ignored"] = superscript_runs_ignored(
+                markdown, superscripts=superscripts) if require_number_mapping else 0
             ambiguous = {n for n in numbers if 1900 <= n <= 2100}
             unresolved = [n for n in numbers if n not in ambiguous]
             consistency.update({
@@ -2975,63 +3581,23 @@ def _annotate_references_and_check_consistency(
             return markdown, consistency
         consistency["references_section_found"] = True
 
-        section_start = heading_match.end()
-        lines = (markdown[section_start:]).split("\n")
-        reference_heading_level = len(heading_match.group(1))
-
-        def _section_end() -> int:
-            for line_index, candidate_line in enumerate(lines):
-                nested_heading = _HEADING_LEVEL_RE.match(candidate_line)
-                if (
-                    nested_heading
-                    and len(nested_heading.group(1)) <= reference_heading_level
-                ):
-                    return line_index
-            return len(lines)
-
-        # A nested heading such as ``### Annotated Source List`` belongs to an
-        # H2 References section. The old any-heading stop made R2 report 0/30
-        # even though all numbered URL rows followed that nested heading.
-        refs_urls: set[str] = set()
-        numbered_urls: dict[int, set[str]] = {}
-        number_collisions: set[int] = set()
+        lines = list(entries.lines)
+        refs_urls = entries.refs_urls
+        numbered_urls = entries.numbered_urls
+        number_collisions = entries.number_collisions
+        unsupported_reference_rows = entries.unsupported_reference_rows
         unverified_flagged = 0
         withdrawn_flagged = 0
         missing_unverified_flags = 0
         missing_withdrawn_flags = 0
-        unsupported_reference_rows = 0
-        section_end = min(len(markdown), section_start + sum(
-            len(line) + 1 for line in lines[:_section_end()]
-        ))
-        numbers = reader_markers(markdown, (heading_match.start(), section_end)) if (
-            require_number_mapping
-        ) else []
-        for i, line in enumerate(lines[: _section_end()]):
-            found = _URL_IN_LINE_RE.findall(line)
-            if not found:
-                continue
-            line_urls = {
-                _reference_url_identity(_clean_ref_url(u, expected_urls=expected_urls))
-                for u in found
-            }
-            refs_urls |= line_urls
-            numbered_match = _NUMBERED_REFERENCE_PREFIX_RE.match(line)
-            reference_number: int | None = None
-            if numbered_match:
-                reference_number = int(numbered_match.group(1) or numbered_match.group(2))
-            else:
-                superscript_match = _UNICODE_SUPER_REFERENCE_ENTRY_RE.match(line)
-                if superscript_match:
-                    reference_number = _super_to_int(superscript_match.group(1))
-            if reference_number is None and re.match(r"^\s*(?:\*\*)?\(?\d+", line):
-                unsupported_reference_rows += 1
-            if reference_number is not None:
-                prior = numbered_urls.get(reference_number)
-                if prior is not None and prior != line_urls:
-                    number_collisions.add(reference_number)
-                if len(line_urls) != 1:
-                    number_collisions.add(reference_number)
-                numbered_urls.setdefault(reference_number, set()).update(line_urls)
+        references_range = (entries.heading_start, entries.section_end)
+        numbers = reader_markers(
+            markdown, references_range, superscripts=superscripts,
+        ) if require_number_mapping else []
+        if require_number_mapping:
+            consistency["superscript_runs_ignored"] = superscript_runs_ignored(
+                markdown, references_range, superscripts=superscripts)
+        for i, line_urls in entries.line_urls.items():
             # Independent flags: a nonstandard line carrying both a downgraded
             # and a quarantined URL gets BOTH suffixes (first-match-wins lost
             # the withdrawn flag — S84 m02 review fix).
@@ -3052,7 +3618,7 @@ def _annotate_references_and_check_consistency(
                 if _WITHDRAWN_REF_SUFFIX in lines[i]:
                     withdrawn_flagged += 1
 
-        annotated = markdown[:section_start] + "\n".join(lines)
+        annotated = markdown[:entries.section_start] + "\n".join(lines)
 
         protocol_only = kept_urls - refs_urls
         quarantined_missing = quarantined_urls - refs_urls
@@ -3066,81 +3632,25 @@ def _annotate_references_and_check_consistency(
                 if citation_reference_markdown is not None
                 else markdown
             )
-
-            def _boundary_numbers(annotation: CitationAnnotation) -> set[int]:
-                start = max(
-                    0, min(len(reference_text), int(annotation.start_index))
-                )
-                end = max(
-                    start, min(len(reference_text), int(annotation.end_index))
-                )
-                span_numbers: set[int] = set()
-                span_text = reference_text[start:end]
-                # Primary [cite:URL] extraction trims the space before the
-                # machine marker, leaving the human-readable number at the
-                # end of the persisted citation span. Inspect that owned
-                # marker before the suffix: in ``[1][cite:A][2][cite:B]``,
-                # A's persisted span ends at [1] while its suffix starts at
-                # B's [2]. Suffix-first inspection falsely binds A to [2].
-                trailing_match = _TRAILING_NUMBERED_MARKERS_RE.search(
-                    span_text
-                )
-                if trailing_match:
-                    span_numbers.update(
-                        int(match)
-                        for match in _NUMBERED_BODY_MARKER_RE.findall(
-                            trailing_match.group(1)
-                        )
-                    )
-                # A primary claim may cite multiple sources as ``claim¹ ²``;
-                # every trailing whitespace-separated superscript marker is
-                # adjacent to the shared machine-citation coordinate.
-                superscript_matches = list(
-                    _UNICODE_SUPER_MARKER_RE.finditer(span_text)
-                )
-                trailing_start = len(span_text)
-                for match in reversed(superscript_matches):
-                    if span_text[match.end() : trailing_start].strip():
-                        break
-                    number = _super_to_int(match.group(1))
-                    if number is not None:
-                        span_numbers.add(number)
-                    trailing_start = match.start()
-                # Numbered-fallback annotations end immediately before their
-                # own reader marker. When several markers are adjacent, only
-                # the first leading marker belongs to this coordinate; later
-                # ones belong to later annotations.
-                suffix_numbers: set[int] = set()
-                suffix_text = reference_text[end : end + 128]
-                suffix_match = _LEADING_NUMBERED_MARKERS_RE.match(suffix_text)
-                if suffix_match:
-                    first_number = _NUMBERED_BODY_MARKER_RE.search(
-                        suffix_match.group(1)
-                    )
-                    if first_number:
-                        suffix_numbers.add(int(first_number.group(1)))
-                leading_offset = len(suffix_text) - len(suffix_text.lstrip())
-                superscript_match = _UNICODE_SUPER_MARKER_RE.match(
-                    suffix_text, leading_offset
-                )
-                if superscript_match:
-                    number = _super_to_int(superscript_match.group(1))
-                    if number is not None:
-                        suffix_numbers.add(number)
-
-                # Primary and numbered-fallback extraction can emit the same
-                # coordinate shape with opposite ownership. Primary A in
-                # ``[1][cite:A][2][cite:B]`` owns trailing [1]; fallback B in
-                # ``[1][2]`` owns suffix [2]. Extraction mode is therefore
-                # required to choose precedence without regressing either.
-                owns_suffix = annotation._extraction_mode == "numbered" or (
-                    annotation._extraction_mode is None and numbered_fallback
-                )
-                if not owns_suffix and span_numbers:
-                    return span_numbers
-                if suffix_numbers:
-                    return suffix_numbers
-                return span_numbers
+            # S102 m04: an inline citation on a numbered References entry is
+            # checked against that entry, whose label is its reader number. The
+            # lines come from the audited text, which the coordinates refer to.
+            reference_entries = (
+                entries if reference_text is markdown
+                else _parse_references_entries(reference_text, expected_urls=expected_urls)
+            )
+            entry_lines: list[tuple[int, int, set[str]]] = []
+            if reference_entries is not None:
+                line_start = reference_entries.section_start
+                for index, line in enumerate(
+                    reference_entries.lines[:reference_entries.section_lines]
+                ):
+                    if index in reference_entries.line_numbers:
+                        entry_lines.append((
+                            line_start, line_start + len(line),
+                            reference_entries.line_urls[index],
+                        ))
+                    line_start += len(line) + 1
 
             def _count_unmapped(
                 annotations: Sequence[CitationAnnotation],
@@ -3163,7 +3673,26 @@ def _annotate_references_and_check_consistency(
                         consistency["annotation_coordinate_drift"] += 1
                         unmapped += 1
                         continue
-                    span_numbers = _boundary_numbers(annotation)
+                    # A numbered-fallback citation owns the marker after its span,
+                    # so the boundary rule keeps binding it.
+                    owns_suffix = annotation._extraction_mode == "numbered" or (
+                        annotation._extraction_mode is None and numbered_fallback
+                    )
+                    entry_urls = None if owns_suffix else next(
+                        (urls for start, end, urls in entry_lines
+                         if start <= annotation.start_index < end),
+                        None,
+                    )
+                    if entry_urls is not None:
+                        consistency["references_entry_citations"] += 1
+                        if identity not in entry_urls:
+                            consistency["references_entry_unmapped"] += 1
+                            unmapped += 1
+                        continue
+                    span_numbers = _boundary_numbers(
+                        reference_text, annotation, superscripts=superscripts,
+                        numbered_fallback=numbered_fallback,
+                    )
                     if not span_numbers:
                         consistency["annotations_without_reader_marker"] += 1
                     if not span_numbers and not numbered_urls:

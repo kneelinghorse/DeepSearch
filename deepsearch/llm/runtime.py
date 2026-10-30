@@ -6,10 +6,14 @@ Legacy development adapters remain in config.py; they are not worker targets.
 
 from __future__ import annotations
 
+import json
 import math
 import re
+import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Iterator, Literal
+
+import httpx
 
 if TYPE_CHECKING:
     from deepsearch.config import DeepSearchSettings
@@ -17,6 +21,110 @@ if TYPE_CHECKING:
 
 class ModelConfigurationError(ValueError):
     """Invalid provider configuration, diagnosed before paid research."""
+
+
+class ProviderResponseError(RuntimeError):
+    """HTTP 200 whose body is a provider error object instead of a completion."""
+
+
+_TOTAL_DEADLINE = "deepsearch_total_deadline"
+
+
+class _TotalDeadlineStream(httpx.SyncByteStream, httpx.AsyncByteStream):
+    """Fail a response body still arriving after the request's total budget.
+
+    httpx timeouts bound each read, and provider keep-alive lines reset them:
+    on 2026-10-15 overloaded DeepSeek held calls for 15 minutes under a 300s
+    timeout before answering with an error object.
+    """
+
+    def __init__(self, stream: Any, deadline: float, request: httpx.Request) -> None:
+        self._stream = stream
+        self._deadline = deadline
+        self._request = request
+
+    def _check(self) -> None:
+        if time.monotonic() > self._deadline:
+            raise httpx.ReadTimeout(
+                "provider request exceeded its total time budget", request=self._request
+            )
+
+    def __iter__(self) -> Iterator[bytes]:
+        for chunk in self._stream:
+            self._check()
+            yield chunk
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        async for chunk in self._stream:
+            self._check()
+            yield chunk
+
+    def close(self) -> None:
+        self._stream.close()
+
+    async def aclose(self) -> None:
+        await self._stream.aclose()
+
+
+def _start_budget(total_seconds: float) -> Callable[[httpx.Request], None]:
+    def start(request: httpx.Request) -> None:
+        request.extensions[_TOTAL_DEADLINE] = time.monotonic() + total_seconds
+
+    return start
+
+
+def _bound_body(response: httpx.Response) -> bool:
+    """Bound the body's total time; return whether it is a completion to inspect."""
+    response.stream = _TotalDeadlineStream(
+        response.stream, response.request.extensions[_TOTAL_DEADLINE], response.request
+    )
+    return (
+        response.status_code == 200
+        and "text/event-stream" not in response.headers.get("content-type", "")
+    )
+
+
+def _reject_error_object(response: httpx.Response) -> None:
+    try:
+        body = json.loads(response.content)
+    except ValueError:
+        return  # Not JSON: the SDK reports it.
+    if isinstance(body, dict) and body.get("error") and not body.get("choices"):
+        raise ProviderResponseError("provider returned an error object with HTTP 200")
+
+
+def provider_http_client(total_seconds: float, **kwargs: Any) -> httpx.Client:
+    """Return the SDK's default client, bounded in total time and rejecting error bodies."""
+    from openai import DefaultHttpxClient
+
+    def bound(response: httpx.Response) -> None:
+        if _bound_body(response):
+            response.read()
+            _reject_error_object(response)
+
+    return DefaultHttpxClient(
+        event_hooks={"request": [_start_budget(total_seconds)], "response": [bound]},
+        **kwargs,
+    )
+
+
+def provider_async_http_client(total_seconds: float, **kwargs: Any) -> httpx.AsyncClient:
+    """Async twin of :func:`provider_http_client`."""
+    from openai import DefaultAsyncHttpxClient
+
+    start = _start_budget(total_seconds)
+
+    async def start_async(request: httpx.Request) -> None:
+        start(request)
+
+    async def bound(response: httpx.Response) -> None:
+        if _bound_body(response):
+            await response.aread()
+            _reject_error_object(response)
+
+    return DefaultAsyncHttpxClient(
+        event_hooks={"request": [start_async], "response": [bound]}, **kwargs
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +298,9 @@ def request_failure(exc: BaseException, *, model: str, stage: str) -> dict[str, 
     """Project a provider exception without its message, body, URL or headers."""
     from deepsearch.error_safety import safe_exception_details
 
+    # The SDK reports an exception raised by the HTTP client as a connection error.
+    if isinstance(exc.__cause__, ProviderResponseError):
+        exc = exc.__cause__
     status = getattr(exc, "status_code", None)
     if status is None:
         status = getattr(getattr(exc, "response", None), "status_code", None)
@@ -206,6 +317,8 @@ def request_failure(exc: BaseException, *, model: str, stage: str) -> dict[str, 
         category = "server"
     elif isinstance(exc, ModelConfigurationError):
         category = "configuration"
+    elif isinstance(exc, ProviderResponseError):
+        category = "server"
     # Unknown provider strings may include request content: only fixed codes survive.
     code = getattr(exc, "code", None)
     allowed_codes = {
@@ -214,7 +327,9 @@ def request_failure(exc: BaseException, *, model: str, stage: str) -> dict[str, 
         "rate_limit_exceeded", "invalid_request_error",
     }
     retryable = status in {408, 409, 429} or (status is not None and status >= 500)
-    retryable = retryable or (status is None and category in {"timeout", "transport", "rate_limit"})
+    retryable = retryable or (
+        status is None and category in {"timeout", "transport", "rate_limit", "server"}
+    )
     return {
         "stage": stage,
         "requested_model": (

@@ -68,6 +68,8 @@ def create_model(config: LLMBackendConfig) -> Any:
             raise RuntimeError(
                 "langchain-openai is required for the DeepSeek/MiniMax backend"
             ) from exc
+        from deepsearch.llm.runtime import provider_async_http_client, provider_http_client
+
         parameters: dict[str, Any] = {}
         extra_body = dict(config.extra_body or {})
         if config.backend == "deepseek":
@@ -87,6 +89,8 @@ def create_model(config: LLMBackendConfig) -> Any:
             base_url=config.base_url,
             timeout=config.request_timeout,
             max_retries=0,
+            http_client=provider_http_client(config.request_timeout),
+            http_async_client=provider_async_http_client(config.request_timeout),
         )
 
 

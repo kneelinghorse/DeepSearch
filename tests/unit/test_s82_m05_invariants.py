@@ -133,7 +133,7 @@ def test_gate_and_critique_reconcile_on_normalised_urls() -> None:
     ann = _ann("https://x.org/a?utm_source=feed", live=True)
 
     gate_cls = classify_citation(live=ann.live, url=ann.url, source_url_set=source_set)
-    critique_cls = critique._classify_citation_for_prompt(ann, source_set)
+    critique_cls = critique._classify_citation_for_prompt(ann, source_set, set())
     assert gate_cls == critique_cls == CLASSIFICATION_LIVE
 
     # End-to-end: the critique liveness-context block (which builds its own set)

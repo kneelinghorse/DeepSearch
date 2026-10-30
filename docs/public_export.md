@@ -10,16 +10,18 @@ approval after the exact source commit and destination are known.
 The operator approved keeping real private-evidence regressions and three full
 vendor-document replays private. The other 27 existing source-passage/critique
 cases need no captured documentation and remain public. The public fixture review
-approves 50 first-party files and withholds 62 retained files. It does not grant
-redistribution rights to vendor captures or replace private inputs with invented
-successful reports.
+approves 50 first-party files and withholds 110 retained files, among them every
+real paid-run fixture added since S97. It does not grant redistribution rights to
+vendor captures or replace private inputs with invented successful reports.
 
-`docs/s97_test_census.json` maps all 3,784 collected private cases to their public
+`docs/s97_test_census.json` maps all 4,615 collected private cases to their public
 or private disposition and maps relocated cases to their previous identities.
-The public scope has 3,666 cases. The 118 withheld cases comprise 69 retained
+The public scope has 4,085 cases. The 530 withheld cases comprise 481 retained
 private-evidence cases, three vendor replays, two private-registry guards and
 44 archived evaluation cases. All remain in the private suite. Relocated test
 assertions and parametrization were checked against the accepted private tree.
+Cases added since S97 follow their file: a test file named `*_private*` is
+withheld, and every other new test reads no private fixture.
 
 Dependencies are installed separately. `docs/dependency_licenses.json` records
 versions, publisher declarations and available license-file hashes from the
